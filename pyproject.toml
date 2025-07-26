@@ -2,44 +2,86 @@
 [project]
 name = "quantalogic-markdown-mcp"
 version = "0.1.0"
-description = "A modern Python 3.11 project scaffolded with best practices: PEP 621, uv, Pyright, isort, pytest, and more."
+description = "A flexible and extensible Markdown parser with AST support"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
-license = { file = "LICENSE" }
+requires-python = ">=3.11"
+license = {text = "MIT"}
 authors = [
-  { name = "Raphael Mansuy", email = "raphael.mansuy@example.com" }
+    {name = "Raphael Mansuy", email = "raphael.mansuy@example.com"},
 ]
-maintainers = [
-  { name = "Raphael Mansuy", email = "raphael.mansuy@example.com" }
-]
-keywords = ["python", "scaffold", "uv", "pyright", "isort", "pytest"]
+keywords = ["markdown", "parser", "ast", "commonmark"]
 classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.12",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent"
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-urls = { homepage = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp" }
+
 dependencies = [
-  "isort",
-  "pytest"
+    "markdown-it-py>=3.0.0",
+    "mdit-py-plugins>=0.4.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pyright"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+latex = [
+    "Pygments>=2.0.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
 
+[project.urls]
+Homepage = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp"
+Repository = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp"
+Documentation = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp/docs"
+Issues = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp/issues"
 
-[tool.isort]
-profile = "black"
-src_paths = ["src"]
-
-[tool.pytest.ini_options]
-minversion = "6.0"
-addopts = "-ra -q"
-testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quantalogic_markdown_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "pygments>=2.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
