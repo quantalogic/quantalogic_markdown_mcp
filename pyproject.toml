@@ -1,0 +1,45 @@
+
+[project]
+name = "quantalogic-markdown-mcp"
+version = "0.1.0"
+description = "A modern Python 3.11 project scaffolded with best practices: PEP 621, uv, Pyright, isort, pytest, and more."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Raphael Mansuy", email = "raphael.mansuy@example.com" }
+]
+maintainers = [
+  { name = "Raphael Mansuy", email = "raphael.mansuy@example.com" }
+]
+keywords = ["python", "scaffold", "uv", "pyright", "isort", "pytest"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+urls = { homepage = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp" }
+dependencies = [
+  "isort",
+  "pytest"
+]
+
+[project.optional-dependencies]
+dev = ["pyright"]
+
+
+[tool.isort]
+profile = "black"
+src_paths = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quantalogic_markdown_mcp"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
