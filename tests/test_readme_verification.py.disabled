@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 # Add the src directory to the path to import our modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from fastmcp import Client
 from quantalogic_markdown_mcp.mcp_server import server

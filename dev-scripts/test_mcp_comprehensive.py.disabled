@@ -7,10 +7,16 @@ Tests all functionality including edge cases and error conditions.
 import pytest
 import threading
 import time
+import sys
+from pathlib import Path
+
+# Add the src directory to the path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 from fastmcp import FastMCP
 
 # Import our MCP server
-from src.quantalogic_markdown_mcp.mcp_server import MarkdownMCPServer
+from quantalogic_markdown_mcp.mcp_server import MarkdownMCPServer
 
 
 class TestMarkdownMCPServer:

@@ -1,259 +1,47 @@
 """
-MCP Server for SafeMarkdownEditor.
+Stateless MCP Server for SafeMarkdownEditor.
 
 This module implements a Model Context Protocol (MCP) server that exposes
-the SafeMarkdownEditor functionality as MCP tools, resources, and prompts.
+the SafeMarkdownEditor functionality as stateless MCP tools, where each
+operation requires a document_path parameter.
 """
 
-import os
-import threading
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
 
 from .safe_editor import SafeMarkdownEditor
-from .safe_editor_types import (
-    EditResult,
-    ValidationLevel,
-)
+from .safe_editor_types import ValidationLevel
+from .stateless_processor import StatelessMarkdownProcessor
 
 
 class MarkdownMCPServer:
     """
-    MCP Server for SafeMarkdownEditor.
+    MCP Server for SafeMarkdownEditor with stateless operations.
     
     Provides MCP-compliant access to SafeMarkdownEditor functionality
-    including tools for document manipulation, resources for document state,
-    and prompts for common editing tasks.
+    as stateless operations where each tool requires a document_path parameter.
     """
     
     def __init__(self, server_name: str = "SafeMarkdownEditor"):
-        """Initialize the MCP server."""
+        """Initialize the stateless MCP server."""
         self.mcp = FastMCP(server_name)
-        self.editor: Optional[SafeMarkdownEditor] = None
-        self.current_file_path: Optional[Path] = None
-        self.lock = threading.RLock()
-        self.document_metadata = {
-            "title": "Untitled Document",
-            "author": "Unknown",
-            "created": datetime.now().isoformat(),
-            "modified": datetime.now().isoformat()
-        }
+        self.processor = StatelessMarkdownProcessor()
         
         self._setup_tools()
         self._setup_resources()
         self._setup_prompts()
     
-    def _resolve_path(self, path_str: str) -> Path:
-        """
-        Resolve a path string to an absolute Path object.
-        
-        Handles:
-        - Absolute paths
-        - Relative paths (relative to current working directory)
-        - Tilde expansion for home directory
-        - Environment variable expansion
-        
-        Args:
-            path_str: The path string to resolve
-            
-        Returns:
-            Resolved absolute Path object
-            
-        Raises:
-            ValueError: If the path cannot be resolved
-        """
-        try:
-            # Expand environment variables and user home directory
-            expanded_path = os.path.expandvars(os.path.expanduser(path_str))
-            
-            # Create Path object and resolve to absolute path
-            path = Path(expanded_path).resolve()
-            
-            return path
-        except Exception as e:
-            raise ValueError(f"Could not resolve path '{path_str}': {e}")
-    
-    def _validate_file_path(self, path: Path, must_exist: bool = True, must_be_file: bool = True) -> None:
-        """
-        Validate a file path for various conditions.
-        
-        Args:
-            path: The path to validate
-            must_exist: Whether the path must exist
-            must_be_file: Whether the path must be a file (not directory)
-            
-        Raises:
-            FileNotFoundError: If must_exist=True and path doesn't exist
-            IsADirectoryError: If must_be_file=True and path is a directory
-            PermissionError: If path is not readable/writable
-        """
-        if must_exist and not path.exists():
-            raise FileNotFoundError(f"Path does not exist: {path}")
-        
-        if path.exists():
-            if must_be_file and path.is_dir():
-                raise IsADirectoryError(f"Path is a directory, not a file: {path}")
-            
-            if not os.access(path, os.R_OK):
-                raise PermissionError(f"No read permission for path: {path}")
-    
-    def load_document_from_file(self, file_path: str, validation_level: ValidationLevel = ValidationLevel.NORMAL) -> None:
-        """
-        Load a Markdown document from a file path.
-        
-        Args:
-            file_path: Path to the Markdown file (supports absolute, relative, and ~ expansion)
-            validation_level: Validation level for the editor
-            
-        Raises:
-            FileNotFoundError: If the file doesn't exist
-            PermissionError: If the file can't be read
-            ValueError: If the path is invalid
-        """
-        with self.lock:
-            # Resolve and validate the path
-            resolved_path = self._resolve_path(file_path)
-            self._validate_file_path(resolved_path, must_exist=True, must_be_file=True)
-            
-            # Read the file content
-            try:
-                content = resolved_path.read_text(encoding='utf-8')
-            except UnicodeDecodeError:
-                # Try with different encodings
-                for encoding in ['utf-8-sig', 'latin1', 'cp1252']:
-                    try:
-                        content = resolved_path.read_text(encoding=encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                else:
-                    raise ValueError(f"Could not decode file {resolved_path} with any supported encoding")
-            
-            # Initialize the editor with the content
-            self.editor = SafeMarkdownEditor(
-                markdown_text=content,
-                validation_level=validation_level
-            )
-            
-            # Update metadata
-            self.current_file_path = resolved_path
-            self.document_metadata.update({
-                "title": resolved_path.stem,
-                "file_path": str(resolved_path),
-                "modified": datetime.now().isoformat(),
-                "file_size": len(content),
-                "encoding": "utf-8"
-            })
-    
-    def save_document_to_file(self, file_path: Optional[str] = None, backup: bool = True) -> None:
-        """
-        Save the current document to a file.
-        
-        Args:
-            file_path: Path to save to (if None, uses current file path)
-            backup: Whether to create a backup of existing file
-            
-        Raises:
-            ValueError: If no file path is specified and no current file is set
-            PermissionError: If the file can't be written
-        """
-        with self.lock:
-            if self.editor is None:
-                raise ValueError("No document loaded")
-            
-            # Determine the target path
-            if file_path is not None:
-                target_path = self._resolve_path(file_path)
-            elif self.current_file_path is not None:
-                target_path = self.current_file_path
-            else:
-                raise ValueError("No file path specified and no current file loaded")
-            
-            # Create parent directories if they don't exist
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Create backup if requested and file exists
-            if backup and target_path.exists():
-                backup_path = target_path.with_suffix(f"{target_path.suffix}.bak")
-                backup_path.write_bytes(target_path.read_bytes())
-            
-            # Save the document
-            content = self.editor.to_markdown()
-            target_path.write_text(content, encoding='utf-8')
-            
-            # Update metadata
-            self.current_file_path = target_path
-            self.document_metadata.update({
-                "file_path": str(target_path),
-                "modified": datetime.now().isoformat(),
-                "file_size": len(content)
-            })
-    
-    def initialize_document(self, 
-                           markdown_text: str = "# Untitled Document\n\nStart writing your content here.",
-                           validation_level: ValidationLevel = ValidationLevel.NORMAL) -> None:
-        """Initialize or replace the current document."""
-        with self.lock:
-            self.editor = SafeMarkdownEditor(
-                markdown_text=markdown_text,
-                validation_level=validation_level
-            )
-            self.document_metadata["modified"] = datetime.now().isoformat()
-    
-    def _ensure_editor(self) -> SafeMarkdownEditor:
-        """Ensure an editor instance exists, creating one if necessary."""
-        if self.editor is None:
-            self.initialize_document()
-        return self.editor
-    
-    def _handle_edit_result(self, result: EditResult) -> Dict[str, Any]:
-        """Convert an EditResult to MCP response format."""
-        if result.success:
-            response = {
-                "success": True,
-                "message": "Operation completed successfully"
-            }
-            # Add information about modified sections
-            if result.modified_sections:
-                response["modified_sections"] = [
-                    {"id": section.id, "title": section.title, "level": section.level}
-                    for section in result.modified_sections
-                ]
-                self.document_metadata["modified"] = datetime.now().isoformat()
-            
-            # Include operation type
-            response["operation"] = result.operation.value
-            
-            # Add preview if available
-            if result.preview:
-                response["preview"] = result.preview
-                
-            return response
-        else:
-            # Return error information but don't raise exception
-            # Let MCP handle the error response format
-            error_messages = [str(error) for error in result.errors]
-            return {
-                "success": False,  
-                "error": "; ".join(error_messages) if error_messages else "Operation failed",
-                "operation": result.operation.value
-            }
-    
     def _setup_tools(self) -> None:
-        """Register all MCP tools."""
+        """Register all stateless MCP tools."""
         
         @self.mcp.tool()
-        def load_document(file_path: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
+        def load_document(document_path: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
             """
-            Load a Markdown document from a file path.
-            
-            Supports absolute paths, relative paths, and tilde (~) expansion.
+            Load and analyze a Markdown document from a file path.
             
             Args:
-                file_path: Path to the Markdown file (e.g., "/path/to/file.md", "./docs/readme.md", "~/Documents/notes.md")
+                document_path: Path to the Markdown file (supports absolute, relative, and ~ expansion)
                 validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
             """
             try:
@@ -265,512 +53,858 @@ class MarkdownMCPServer:
                 }
                 validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
                 
-                # Load the document
-                self.load_document_from_file(file_path, validation_enum)
-                
-                # Get document info
-                sections = self.editor.get_sections()
-                content_preview = self.editor.to_markdown()[:200] + "..." if len(self.editor.to_markdown()) > 200 else self.editor.to_markdown()
+                # Load document without server state
+                editor = self.processor.load_document(document_path, validation_enum)
+                sections = editor.get_sections()
+                content_preview = editor.to_markdown()[:200] + "..." if len(editor.to_markdown()) > 200 else editor.to_markdown()
                 
                 return {
                     "success": True,
-                    "message": f"Successfully loaded document from {self.current_file_path}",
-                    "file_path": str(self.current_file_path),
+                    "message": f"Successfully analyzed document at {document_path}",
+                    "document_path": document_path,
                     "sections_count": len(sections),
                     "content_preview": content_preview,
-                    "file_size": self.document_metadata.get("file_size", 0)
+                    "file_size": len(editor.to_markdown()),
+                    "stateless": True
                 }
                 
             except Exception as e:
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "suggestions": [
-                        "Check that the file path exists and is readable",
-                        "Ensure the file is a valid Markdown document",
-                        "Try using an absolute path if relative path fails"
-                    ]
-                }
+                return self.processor.create_error_response(str(e), type(e).__name__)
         
         @self.mcp.tool()
-        def save_document(file_path: Optional[str] = None, backup: bool = True) -> Dict[str, Any]:
+        def insert_section(document_path: str, heading: str, content: str, position: int,
+                          auto_save: bool = True, backup: bool = True,
+                          validation_level: str = "NORMAL") -> Dict[str, Any]:
             """
-            Save the current document to a file.
+            Insert a new section at a specified location.
             
             Args:
-                file_path: Path to save to (if not provided, saves to current file)
-                backup: Whether to create a backup of existing file
+                document_path: Path to the Markdown file
+                heading: The section heading/title
+                content: The section content
+                position: Position to insert (0-based index)
+                auto_save: Whether to automatically save the document
+                backup: Whether to create a backup before saving
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
             """
-            try:
-                self.save_document_to_file(file_path, backup)
+            def operation(editor):
+                sections = editor.get_sections()
                 
-                return {
-                    "success": True,
-                    "message": f"Successfully saved document to {self.current_file_path}",
-                    "file_path": str(self.current_file_path),
-                    "backup_created": backup and Path(str(self.current_file_path) + ".bak").exists()
-                }
-                
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "suggestions": [
-                        "Ensure you have write permissions for the target directory",
-                        "Check that the parent directory exists",
-                        "Load a document first if none is currently loaded"
-                    ]
-                }
+                if position == 0 or not sections:
+                    if sections:
+                        after_section = sections[0]
+                        return editor.insert_section_after(
+                            after_section=after_section,
+                            level=2,
+                            title=heading,
+                            content=content
+                        )
+                    else:
+                        # Handle empty document case
+                        from .safe_editor_types import EditResult, OperationType
+                        return EditResult(
+                            success=False,
+                            operation=OperationType.INSERT,
+                            errors=["Cannot insert into empty document"]
+                        )
+                else:
+                    if position-1 < len(sections):
+                        after_section = sections[position-1]
+                        return editor.insert_section_after(
+                            after_section=after_section,
+                            level=2,
+                            title=heading,
+                            content=content
+                        )
+                    else:
+                        from .safe_editor_types import EditResult, OperationType
+                        return EditResult(
+                            success=False,
+                            operation=OperationType.INSERT,
+                            errors=[f"Position {position} is out of range"]
+                        )
+            
+            validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+            validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+            
+            return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
         
         @self.mcp.tool()
-        def get_file_info() -> Dict[str, Any]:
-            """Get information about the currently loaded file."""
-            with self.lock:
-                if self.current_file_path is None:
-                    return {
-                        "success": False,
-                        "error": "No file currently loaded",
-                        "suggestions": ["Use load_document to load a file first"]
-                    }
-                
-                try:
-                    path = self.current_file_path
-                    stat = path.stat()
-                    
-                    return {
-                        "success": True,
-                        "file_path": str(path),
-                        "absolute_path": str(path.resolve()),
-                        "file_name": path.name,
-                        "file_stem": path.stem,
-                        "file_suffix": path.suffix,
-                        "file_size": stat.st_size,
-                        "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                        "is_writable": os.access(path, os.W_OK),
-                        "is_readable": os.access(path, os.R_OK)
-                    }
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": f"Could not get file info: {e}",
-                        "suggestions": ["Check that the file still exists"]
-                    }
-        
-        @self.mcp.tool()
-        def test_path_resolution(path: str) -> Dict[str, Any]:
+        def delete_section(document_path: str, section_id: Optional[str] = None, heading: Optional[str] = None,
+                          auto_save: bool = True, backup: bool = True,
+                          validation_level: str = "NORMAL") -> Dict[str, Any]:
             """
-            Test path resolution to verify absolute, relative, and tilde expansion works.
+            Delete a section by ID or heading.
             
             Args:
-                path: The path to test (can be absolute, relative, or use ~ for home)
+                document_path: Path to the Markdown file
+                section_id: The section ID to delete (optional)
+                heading: The section heading to delete (optional)
+                auto_save: Whether to automatically save the document
+                backup: Whether to create a backup before saving
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
             """
-            try:
-                resolved_path = self._resolve_path(path)
-                
-                return {
-                    "success": True,
-                    "original_path": path,
-                    "resolved_path": str(resolved_path),
-                    "absolute_path": str(resolved_path.resolve()),
-                    "exists": resolved_path.exists(),
-                    "is_file": resolved_path.is_file() if resolved_path.exists() else None,
-                    "is_directory": resolved_path.is_dir() if resolved_path.exists() else None,
-                    "is_readable": os.access(resolved_path, os.R_OK) if resolved_path.exists() else None,
-                    "is_writable": os.access(resolved_path, os.W_OK) if resolved_path.exists() else None,
-                    "parent_exists": resolved_path.parent.exists(),
-                    "expansion_info": {
-                        "tilde_expanded": os.path.expanduser(path) != path,
-                        "env_vars_expanded": os.path.expandvars(os.path.expanduser(path)) != os.path.expanduser(path),
-                        "is_absolute": Path(path).is_absolute(),
-                        "is_relative": not Path(path).is_absolute()
-                    }
-                }
-                
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "original_path": path,
-                    "suggestions": [
-                        "Check the path syntax",
-                        "Ensure environment variables exist if used",
-                        "Verify parent directories exist for relative paths"
-                    ]
-                }
-        
-        @self.mcp.tool()
-        def insert_section(heading: str, content: str, position: int) -> Dict[str, Any]:
-            """Insert a new section at a specified location."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    
-                    # Get all sections to find the insertion point
+            def operation(editor):
+                if section_id:
+                    # Find section by ID
+                    section_ref = editor.get_section_by_id(section_id)
+                    if not section_ref:
+                        from .safe_editor_types import EditResult, OperationType
+                        return EditResult(
+                            success=False,
+                            operation=OperationType.DELETE,
+                            errors=[f"Section with ID '{section_id}' not found"]
+                        )
+                elif heading:
+                    # Find section by heading
                     sections = editor.get_sections()
-                    
-                    if position == 0 or not sections:
-                        # Insert at the beginning is tricky - we'd need insert_section_before
-                        # For now, we'll insert after the first section if it exists
-                        if sections:
-                            after_section = sections[0]
-                            result = editor.insert_section_after(
-                                after_section=after_section,
-                                level=2,  # Default to H2
-                                title=heading,
-                                content=content
-                            )
-                        else:
-                            return {
-                                "success": False,
-                                "error": "Cannot insert into empty document",
-                                "suggestions": ["Initialize document first"]
-                            }
-                    else:
-                        # Insert after the section at position-1 (if it exists)
-                        if position-1 < len(sections):
-                            after_section = sections[position-1]
-                            result = editor.insert_section_after(
-                                after_section=after_section,
-                                level=2,  # Default to H2
-                                title=heading,
-                                content=content
-                            )
-                        else:
-                            return {
-                                "success": False,
-                                "error": f"Position {position} is out of range",
-                                "suggestions": [f"Use position between 0 and {len(sections)}"]
-                            }
-                    
-                    return self._handle_edit_result(result)
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Check that the position is valid", "Ensure heading format is correct"]
-                    }
-        
-        @self.mcp.tool()
-        def delete_section(section_id: Optional[str] = None, heading: Optional[str] = None) -> Dict[str, Any]:
-            """Delete a section by ID or heading."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    
-                    if section_id:
-                        # Find section by ID
-                        section_ref = editor.get_section_by_id(section_id)
-                        if not section_ref:
-                            return {
-                                "success": False,
-                                "error": f"Section with ID '{section_id}' not found",
-                                "suggestions": ["Use list_sections to see available sections"]
-                            }
-                    elif heading:
-                        # Find section by heading
-                        sections = editor.get_sections()
-                        matching_sections = [s for s in sections if s.title == heading]
-                        if not matching_sections:
-                            return {
-                                "success": False,
-                                "error": f"Section with heading '{heading}' not found",
-                                "suggestions": ["Use list_sections to see available sections"]
-                            }
-                        section_ref = matching_sections[0]
-                    else:
-                        return {
-                            "success": False,
-                            "error": "Either section_id or heading must be provided",
-                            "suggestions": ["Provide section_id or heading parameter"]
-                        }
-                    
-                    result = editor.delete_section(section_ref, cascade=True)
-                    return self._handle_edit_result(result)
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Check that the section exists", "Ensure section ID is valid"]
-                    }
-        
-        @self.mcp.tool()
-        def update_section(section_id: str, content: str) -> Dict[str, Any]:
-            """Update the content of a section."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    
-                    section_ref = editor.get_section_by_id(section_id)
-                    if not section_ref:
-                        return {
-                            "success": False,
-                            "error": f"Section with ID '{section_id}' not found",
-                            "suggestions": ["Use list_sections to see available sections"]
-                        }
-                    
-                    result = editor.update_section_content(
-                        section_ref=section_ref,
-                        content=content,
-                        preserve_subsections=True
+                    matching_sections = [s for s in sections if s.title == heading]
+                    if not matching_sections:
+                        from .safe_editor_types import EditResult, OperationType
+                        return EditResult(
+                            success=False,
+                            operation=OperationType.DELETE,
+                            errors=[f"Section with heading '{heading}' not found"]
+                        )
+                    section_ref = matching_sections[0]
+                else:
+                    from .safe_editor_types import EditResult, OperationType
+                    return EditResult(
+                        success=False,
+                        operation=OperationType.DELETE,
+                        errors=["Either section_id or heading must be provided"]
                     )
-                    
-                    return self._handle_edit_result(result)
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Check that the section ID is valid", "Ensure content is properly formatted"]
-                    }
+                
+                return editor.delete_section(section_ref, cascade=True)
+            
+            validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+            validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+            
+            return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
         
         @self.mcp.tool()
-        def move_section(section_id: str, new_position: int) -> Dict[str, Any]:
-            """Move a section to a new location."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    
-                    section_ref = editor.get_section_by_id(section_id)
-                    if not section_ref:
-                        return {
-                            "success": False,
-                            "error": f"Section with ID '{section_id}' not found",
-                            "suggestions": ["Use list_sections to see available sections"]
-                        }
-                    
-                    result = editor.move_section(
-                        section_ref=section_ref,
-                        target_position=new_position
+        def update_section(document_path: str, section_id: str, content: str,
+                          auto_save: bool = True, backup: bool = True,
+                          validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Update the content of an existing section.
+            
+            Args:
+                document_path: Path to the Markdown file
+                section_id: The section ID to update
+                content: New content for the section
+                auto_save: Whether to automatically save the document
+                backup: Whether to create a backup before saving
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
+            """
+            def operation(editor):
+                section_ref = editor.get_section_by_id(section_id)
+                if not section_ref:
+                    from .safe_editor_types import EditResult, OperationType
+                    return EditResult(
+                        success=False,
+                        operation=OperationType.UPDATE,
+                        errors=[f"Section with ID '{section_id}' not found"]
                     )
-                    
-                    return self._handle_edit_result(result)
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Check that the section ID is valid", "Ensure new position is within bounds"]
-                    }
+                
+                return editor.update_section(section_ref, content)
+            
+            validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+            validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+            
+            return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
         
         @self.mcp.tool()
-        def get_section(section_id: str) -> Dict[str, Any]:
-            """Retrieve a section's content."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    
-                    section_ref = editor.get_section_by_id(section_id)
-                    if not section_ref:
-                        return {
-                            "success": False,
-                            "error": f"Section with ID '{section_id}' not found",
-                            "suggestions": ["Use list_sections to see available sections"]
-                        }
-                    
-                    # Get the actual content from the document
-                    document_lines = editor.to_markdown().split('\n')
-                    section_lines = document_lines[section_ref.line_start:section_ref.line_end]
-                    section_content = '\n'.join(section_lines)
-                    
+        def get_section(document_path: str, section_id: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Get a specific section by ID.
+            
+            Args:
+                document_path: Path to the Markdown file
+                section_id: The section ID to retrieve
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
+            """
+            try:
+                validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+                validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+                
+                editor = self.processor.load_document(document_path, validation_enum)
+                section_ref = editor.get_section_by_id(section_id)
+                
+                if not section_ref:
                     return {
-                        "success": True,
-                        "heading": section_ref.title,
-                        "content": section_content,
-                        "position": section_ref.line_start,
+                        "success": False,
+                        "error": f"Section with ID '{section_id}' not found",
+                        "suggestions": ["Use list_sections to see available sections"]
+                    }
+                
+                # Extract section content using line ranges
+                full_content = editor.to_markdown()
+                lines = full_content.split('\n')
+                section_lines = lines[section_ref.line_start:section_ref.line_end+1]
+                section_content = '\n'.join(section_lines)
+                
+                return {
+                    "success": True,
+                    "section": {
+                        "id": section_ref.id,
+                        "title": section_ref.title,
                         "level": section_ref.level,
-                        "section_id": section_ref.id
+                        "content": section_content,
+                        "line_start": section_ref.line_start,
+                        "line_end": section_ref.line_end
                     }
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Check that the section ID is valid"]
-                    }
-        
-        @self.mcp.tool()
-        def list_sections() -> Dict[str, Any]:
-            """List all sections and their metadata."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    sections = editor.get_sections()
-                    
-                    sections_data = []
-                    for section in sections:
-                        sections_data.append({
-                            "section_id": section.id,
-                            "heading": section.title,
-                            "position": section.line_start,
-                            "level": section.level,
-                            "path": section.path
-                        })
-                    
-                    return {
-                        "success": True,
-                        "sections": sections_data
-                    }
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Ensure document is properly initialized"]
-                    }
-        
-        @self.mcp.tool()
-        def undo() -> Dict[str, Any]:
-            """Undo the last operation."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    
-                    # Get current transaction history
-                    history = editor.get_transaction_history()
-                    if not history:
-                        return {
-                            "success": False,
-                            "error": "No operations to undo",
-                            "suggestions": ["Make some changes first"]
-                        }
-                    
-                    # Rollback the last transaction
-                    last_transaction = history[-1]
-                    result = editor.rollback_transaction(last_transaction.id)
-                    
-                    if result.success:
-                        self.document_metadata["modified"] = datetime.now().isoformat()
-                    
-                    return self._handle_edit_result(result)
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Ensure there are operations to undo"]
-                    }
-        
-        @self.mcp.tool()
-        def redo() -> Dict[str, Any]:
-            """Redo the last undone operation."""
-            # Note: Current SafeMarkdownEditor doesn't have explicit redo
-            # This is a placeholder implementation
-            return {
-                "success": False,
-                "error": "Redo functionality not yet implemented",
-                "suggestions": ["Use undo to reverse changes"]
-            }
-        
-        @self.mcp.tool()
-        def get_document() -> Dict[str, Any]:
-            """Retrieve the full Markdown document."""
-            with self.lock:
-                try:
-                    editor = self._ensure_editor()
-                    document_text = editor.to_markdown()
-                    
-                    return {
-                        "success": True,
-                        "document": document_text
-                    }
-                    
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": str(e),
-                        "suggestions": ["Ensure document is properly initialized"]
-                    }
-    
-    def _setup_resources(self) -> None:
-        """Register all MCP resources."""
-        
-        @self.mcp.resource("document://current")
-        def get_current_document() -> str:
-            """The current Markdown document."""
-            with self.lock:
-                editor = self._ensure_editor()
-                return editor.to_markdown()
-        
-        @self.mcp.resource("document://history")  
-        def get_document_history() -> Dict[str, Any]:
-            """List of past operations (for undo/redo)."""
-            with self.lock:
-                editor = self._ensure_editor()
-                history = editor.get_transaction_history()
+                }
                 
-                history_data = []
-                for transaction in history:
-                    history_data.append({
-                        "operation": transaction.operation.value,
-                        "timestamp": transaction.timestamp.isoformat(),
-                        "details": {
-                            "message": transaction.description,
-                            "success": transaction.success
-                        }
+            except Exception as e:
+                return self.processor.create_error_response(str(e), type(e).__name__)
+        
+        @self.mcp.tool()
+        def list_sections(document_path: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            List all sections in the document.
+            
+            Args:
+                document_path: Path to the Markdown file
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"  
+            """
+            try:
+                validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+                validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+                
+                editor = self.processor.load_document(document_path, validation_enum)
+                sections = editor.get_sections()
+                
+                # Get full content to extract section content
+                full_content = editor.to_markdown()
+                lines = full_content.split('\n')
+                
+                # Build section list with content preview
+                section_list = []
+                for section in sections:
+                    # Extract section content using line ranges
+                    try:
+                        section_lines = lines[section.line_start:section.line_end+1]
+                        section_content = '\n'.join(section_lines)
+                        content_preview = section_content[:100] + "..." if len(section_content) > 100 else section_content
+                    except (IndexError, AttributeError):
+                        # Fallback if line extraction fails
+                        content_preview = "Content preview not available"
+                    
+                    section_list.append({
+                        "id": section.id,  
+                        "title": section.title,
+                        "level": section.level,
+                        "line_start": section.line_start,
+                        "line_end": section.line_end,
+                        "content_preview": content_preview
                     })
                 
-                return {"history": history_data}
+                return {
+                    "success": True,
+                    "sections": section_list,
+                    "total_sections": len(sections)
+                }
+                
+            except Exception as e:
+                return self.processor.create_error_response(str(e), type(e).__name__)
         
-        @self.mcp.resource("document://metadata")
-        def get_document_metadata() -> Dict[str, Any]:
-            """Document metadata (title, author, etc.)."""
-            with self.lock:
-                return self.document_metadata.copy()
+        @self.mcp.tool()
+        def move_section(document_path: str, section_id: str, target_position: int,
+                        auto_save: bool = True, backup: bool = True,
+                        validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Move a section to a different position.
+            
+            Args:
+                document_path: Path to the Markdown file
+                section_id: The section ID to move
+                target_position: Target position (0-based index)
+                auto_save: Whether to automatically save the document
+                backup: Whether to create a backup before saving
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
+            """
+            def operation(editor):
+                section_ref = editor.get_section_by_id(section_id)
+                if not section_ref:
+                    from .safe_editor_types import EditResult, OperationType
+                    return EditResult(
+                        success=False,
+                        operation=OperationType.MOVE,
+                        errors=[f"Section with ID '{section_id}' not found"]
+                    )
+                
+                sections = editor.get_sections()
+                if target_position >= len(sections) or target_position < 0:
+                    from .safe_editor_types import EditResult, OperationType
+                    return EditResult(
+                        success=False,
+                        operation=OperationType.MOVE,
+                        errors=[f"Target position {target_position} is out of range (0-{len(sections)-1})"]
+                    )
+                
+                target_section = sections[target_position]
+                return editor.move_section_after(section_ref, target_section)
+            
+            validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+            validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+            
+            return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
+        
+        @self.mcp.tool()
+        def get_document(document_path: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Get the complete document content and structure.
+            
+            Args:
+                document_path: Path to the Markdown file
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
+            """
+            try:
+                validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+                validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+                
+                editor = self.processor.load_document(document_path, validation_enum)
+                sections = editor.get_sections()
+                content = editor.to_markdown()
+                
+                return {
+                    "success": True,
+                    "document_path": document_path,
+                    "content": content,
+                    "sections": [
+                        {
+                            "id": section.id,
+                            "title": section.title,
+                            "level": section.level,
+                            "line_start": section.line_start,
+                            "line_end": section.line_end
+                        }
+                        for section in sections
+                    ],
+                    "metadata": {
+                        "total_sections": len(sections),
+                        "total_lines": len(content.split('\n')),
+                        "file_size": len(content),
+                        "validation_level": validation_level
+                    }
+                }
+                
+            except Exception as e:
+                return self.processor.create_error_response(str(e), type(e).__name__)
+        
+        @self.mcp.tool()
+        def save_document(document_path: str, target_path: Optional[str] = None,
+                         backup: bool = True, validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Save the document (mainly for validation purposes since auto_save handles most cases).
+            
+            Args:
+                document_path: Path to the source Markdown file
+                target_path: Path to save to (if different from source)
+                backup: Whether to create a backup before saving
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
+            """
+            try:
+                validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+                validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+                
+                editor = self.processor.load_document(document_path, validation_enum)
+                
+                # Determine save path
+                save_path = target_path if target_path else document_path
+                
+                # Save the document
+                save_result = self.processor.save_document(editor, save_path, backup)
+                return save_result
+                
+            except Exception as e:
+                return self.processor.create_error_response(str(e), type(e).__name__)
+        
+        @self.mcp.tool()
+        def analyze_document(document_path: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Analyze document structure and provide insights.
+            
+            Args:
+                document_path: Path to the Markdown file
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
+            """
+            try:
+                validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+                validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+                
+                editor = self.processor.load_document(document_path, validation_enum)
+                sections = editor.get_sections()
+                content = editor.to_markdown()
+                
+                # Analyze heading levels
+                heading_levels = {}
+                for section in sections:
+                    level = section.level
+                    heading_levels[level] = heading_levels.get(level, 0) + 1
+                
+                # Content statistics
+                lines = content.split('\n')
+                words = len(content.split())
+                
+                return {
+                    "success": True,
+                    "document_path": document_path,
+                    "analysis": {
+                        "structure": {
+                            "total_sections": len(sections),
+                            "heading_levels": heading_levels,
+                            "max_depth": max(heading_levels.keys()) if heading_levels else 0,
+                            "min_depth": min(heading_levels.keys()) if heading_levels else 0
+                        },
+                        "content": {
+                            "total_lines": len(lines),
+                            "non_empty_lines": len([line for line in lines if line.strip()]),
+                            "total_words": words,
+                            "total_characters": len(content),
+                            "average_section_length": words // len(sections) if sections else 0
+                        },
+                        "validation": {
+                            "level": validation_level,
+                            "is_valid": True  # If we got here, it loaded successfully
+                        }
+                    }
+                }
+                
+            except Exception as e:
+                return self.processor.create_error_response(str(e), type(e).__name__)
+    
+    def _setup_resources(self) -> None:
+        """Register MCP resources (stateless version has no persistent resources)."""
+        pass
     
     def _setup_prompts(self) -> None:
-        """Register all MCP prompts."""
+        """Register MCP prompts for common operations."""
         
         @self.mcp.prompt()
-        def summarize_section(section_content: str) -> str:
-            """Generate a prompt to summarize a section."""
-            return f"""Summarize the following section:
+        def document_editing_guide() -> str:
+            """Guide for using the stateless document editing tools."""
+            return """
+# Stateless Markdown Document Editing Guide
 
-{section_content}
+This MCP server provides stateless tools for editing Markdown documents. Each operation requires a `document_path` parameter.
 
-Please provide a concise summary that captures the main points and key information."""
-        
+## Core Operations
+
+### Document Loading and Analysis
+- `load_document(document_path, validation_level)` - Load and analyze a document
+- `analyze_document(document_path, validation_level)` - Get detailed document analysis
+
+### Section Operations
+- `list_sections(document_path)` - List all sections
+- `get_section(document_path, section_id)` - Get specific section
+- `insert_section(document_path, heading, content, position)` - Insert new section
+- `update_section(document_path, section_id, content)` - Update existing section
+- `delete_section(document_path, section_id|heading)` - Delete section
+- `move_section(document_path, section_id, target_position)` - Move section
+
+### Document Operations
+- `get_document(document_path)` - Get complete document content
+- `save_document(document_path, target_path)` - Save document
+
+## Key Features
+
+1. **Stateless**: No server state, each operation works on the specified file
+2. **Auto-save**: Most operations save automatically (configurable)  
+3. **Backup**: Automatic backups created before modifications
+4. **Validation**: Configurable validation levels (STRICT, NORMAL, PERMISSIVE)
+5. **Path Resolution**: Supports absolute, relative, and tilde (~) paths
+
+## Best Practices
+
+1. Use absolute paths when possible for consistency
+2. Enable backups for important documents
+3. Use appropriate validation levels for your use case
+4. Check operation results for success/failure status
+
+All operations return structured responses with success status, error details, and helpful suggestions.
+"""
+
         @self.mcp.prompt()
-        def rewrite_section(section_content: str) -> str:
-            """Generate a prompt to rewrite a section for clarity and conciseness."""
-            return f"""Rewrite the following section for clarity and conciseness:
+        def section_operations_examples() -> str:
+            """Examples of common section operations."""
+            return """
+# Section Operations Examples
 
-{section_content}
+## Insert a new section
+```
+insert_section(
+    document_path="/path/to/document.md",
+    heading="New Section",
+    content="This is the content of the new section.",
+    position=1,
+    auto_save=True,
+    backup=True
+)
+```
 
-Please improve the writing while maintaining the original meaning and key information."""
-        
-        @self.mcp.prompt()
-        def generate_outline(document: str) -> str:
-            """Generate a prompt to create an outline for the document."""
-            return f"""Generate an outline for the following document:
+## Update existing section content  
+```
+update_section(
+    document_path="/path/to/document.md",
+    section_id="section-123",
+    content="Updated content for this section.",
+    auto_save=True,
+    backup=True
+)
+```
 
-{document}
+## Move a section to different position
+```
+move_section(
+    document_path="/path/to/document.md", 
+    section_id="section-123",
+    target_position=3,
+    auto_save=True,
+    backup=True
+)
+```
 
-Please create a hierarchical outline that shows the main sections and subsections."""
+## Delete a section
+```
+delete_section(
+    document_path="/path/to/document.md",
+    section_id="section-123",
+    auto_save=True,
+    backup=True
+)
+```
+
+All operations support both section IDs and heading-based lookups where appropriate.
+"""
     
-    def run(self, **kwargs) -> None:
-        """Run the MCP server."""
-        # Initialize with default document if none exists
-        if self.editor is None:
-            self.initialize_document()
+    def call_tool_sync(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Synchronously call a tool for testing purposes."""
+        # Get the tool function from the mcp instance
+        tools = {
+            "load_document": self._load_document_impl,
+            "list_sections": self._list_sections_impl,
+            "get_section": self._get_section_impl,
+            "insert_section": self._insert_section_impl,
+            "update_section": self._update_section_impl,
+            "delete_section": self._delete_section_impl,
+            "move_section": self._move_section_impl,
+            "get_document": self._get_document_impl,
+            "save_document": self._save_document_impl,
+            "analyze_document": self._analyze_document_impl,
+        }
         
-        # Run the FastMCP server
-        self.mcp.run(**kwargs)
+        if tool_name not in tools:
+            return {"success": False, "error": f"Tool '{tool_name}' not found"}
+        
+        try:
+            return tools[tool_name](**arguments)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    # Implementation methods for testing
+    def _load_document_impl(self, document_path: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
+        """Implementation for load_document tool."""
+        try:
+            # Convert string validation level to enum
+            validation_map = {
+                "STRICT": ValidationLevel.STRICT,
+                "NORMAL": ValidationLevel.NORMAL,
+                "PERMISSIVE": ValidationLevel.PERMISSIVE
+            }
+            validation_enum = validation_map.get(validation_level, ValidationLevel.NORMAL)
+            
+            # Load document content first
+            from pathlib import Path
+            doc_path = Path(document_path).expanduser().resolve()
+            
+            if not doc_path.exists():
+                return self.processor.create_error_response(f"Path does not exist: {doc_path}", "DocumentNotFoundError")
+            
+            content = doc_path.read_text(encoding='utf-8')
+            
+            # Create editor with content and validation level
+            editor = SafeMarkdownEditor(content, validation_level=validation_enum)
+            
+            sections = editor.get_sections()
+            
+            return {
+                "success": True,
+                "message": f"Successfully loaded document from {document_path}",
+                "document_path": document_path,
+                "sections_count": len(sections),
+                "stateless": True,
+                "validation_level": validation_level
+            }
+        except Exception as e:
+            return self.processor.create_error_response(str(e), type(e).__name__)
+
+    def _list_sections_impl(self, document_path: str) -> Dict[str, Any]:
+        """Implementation for list_sections tool."""
+        def operation(editor):
+            from .safe_editor_types import EditResult, EditOperation
+            
+            sections = editor.get_sections()
+            
+            section_list = []
+            for section in sections:
+                # Extract content for the section by using line ranges
+                content = ""
+                try:
+                    markdown_text = editor.to_markdown()
+                    lines = markdown_text.split('\n')
+                    
+                    # Extract section content from line_start to line_end
+                    if section.line_start < len(lines) and section.line_end < len(lines):
+                        content_lines = lines[section.line_start:section.line_end + 1]
+                        content = '\n'.join(content_lines)
+                except Exception:
+                    content = ""
+                
+                section_list.append({
+                    "id": section.id,
+                    "title": section.title,
+                    "level": section.level,
+                    "start_line": section.line_start,
+                    "end_line": section.line_end,
+                    "content": content
+                })
+            
+            return EditResult(
+                success=True,
+                operation=EditOperation.BATCH_OPERATIONS,  # Or a custom operation
+                modified_sections=[],
+                errors=[],
+                warnings=[],
+                metadata={"sections": section_list}
+            )
+        
+        return self.processor.execute_operation(document_path, operation, auto_save=False)
+    
+    def _get_section_impl(self, document_path: str, section_id: str) -> Dict[str, Any]:
+        """Implementation for get_section tool."""
+        def operation(editor):
+            from .safe_editor_types import EditResult, EditOperation, SafeParseError, ErrorCategory
+            
+            section = editor.get_section_by_id(section_id)
+            
+            if not section:
+                return EditResult(
+                    success=False,
+                    operation=EditOperation.BATCH_OPERATIONS,
+                    modified_sections=[],
+                    errors=[SafeParseError(
+                        message=f"Section '{section_id}' not found",
+                        error_code="SECTION_NOT_FOUND",
+                        category=ErrorCategory.VALIDATION
+                    )],
+                    warnings=[]
+                )
+            
+            # Extract content for the section
+            content = ""
+            try:
+                markdown_text = editor.to_markdown()
+                lines = markdown_text.split('\n')
+                
+                # Extract section content from line_start to line_end
+                if section.line_start < len(lines) and section.line_end < len(lines):
+                    content_lines = lines[section.line_start:section.line_end + 1]
+                    content = '\n'.join(content_lines)
+            except Exception:
+                content = ""
+            
+            section_data = {
+                "id": section.id,
+                "title": section.title,
+                "level": section.level,
+                "start_line": section.line_start,
+                "end_line": section.line_end,
+                "content": content
+            }
+            
+            return EditResult(
+                success=True,
+                operation=EditOperation.BATCH_OPERATIONS,
+                modified_sections=[],
+                errors=[],
+                warnings=[],
+                metadata={"section": section_data}
+            )
+        
+        return self.processor.execute_operation(document_path, operation, auto_save=False)
+    
+    def _insert_section_impl(self, document_path: str, heading: str, content: str = "", position: Optional[int] = None, auto_save: bool = True, backup: bool = True) -> Dict[str, Any]:
+        """Implementation for insert_section tool."""
+        def operation(editor):
+            sections = editor.get_sections()
+            
+            # Handle position parameter
+            if position is None or position >= len(sections):
+                # Insert at the end
+                if sections:
+                    last_section = sections[-1]
+                    return editor.insert_section_after(last_section, 1, heading, content)
+                else:
+                    # Document is empty - create a simple document with the new section
+                    return {"success": False, "error": "Cannot insert into empty document - use save_document first"}
+            
+            elif position == 0:
+                # Insert at the beginning - insert before first section
+                if sections:
+                    # Since we can't insert "before", we need to manipulate this differently
+                    # For now, let's insert at level 1 after a dummy section or return error
+                    return {"success": False, "error": "Inserting at position 0 not supported - use position >= 1"}
+                else:
+                    return {"success": False, "error": "Cannot insert into empty document"}
+            else:
+                # Insert after the section at position-1
+                after_section = sections[position - 1]
+                level = after_section.level if after_section.level < 6 else 1
+                return editor.insert_section_after(after_section, level, heading, content)
+            
+        validation_enum = ValidationLevel.NORMAL
+        return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
+    
+    def _update_section_impl(self, document_path: str, section_id: str, content: str, auto_save: bool = True, backup: bool = True) -> Dict[str, Any]:
+        """Implementation for update_section tool."""
+        def operation(editor):
+            section = editor.get_section_by_id(section_id)
+            if not section:
+                return {"success": False, "error": f"Section '{section_id}' not found"}
+            return editor.update_section_content(section, content)
+            
+        validation_enum = ValidationLevel.NORMAL
+        return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
+    
+    def _delete_section_impl(self, document_path: str, section_id: str, auto_save: bool = True, backup: bool = True) -> Dict[str, Any]:
+        """Implementation for delete_section tool."""
+        def operation(editor):
+            section = editor.get_section_by_id(section_id)
+            if not section:
+                return {"success": False, "error": f"Section '{section_id}' not found"}
+            return editor.delete_section(section)
+            
+        validation_enum = ValidationLevel.NORMAL
+        return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
+    
+    def _move_section_impl(self, document_path: str, section_id: str, target_position: int, auto_save: bool = True, backup: bool = True) -> Dict[str, Any]:
+        """Implementation for move_section tool."""
+        def operation(editor):
+            section = editor.get_section_by_id(section_id)
+            if not section:
+                return {"success": False, "error": f"Section '{section_id}' not found"}
+                
+            sections = editor.get_sections()
+            if target_position < 0 or target_position >= len(sections):
+                return {"success": False, "error": f"Invalid target position: {target_position}"}
+                
+            target_section = sections[target_position]
+            return editor.move_section(section, target_section, "after")
+            
+        validation_enum = ValidationLevel.NORMAL
+        return self.processor.execute_operation(document_path, operation, auto_save, backup, validation_enum)
+    
+    def _get_document_impl(self, document_path: str) -> Dict[str, Any]:
+        """Implementation for get_document tool."""
+        def operation(editor):
+            from .safe_editor_types import EditResult, EditOperation
+            
+            content = editor.to_markdown()
+            sections = editor.get_sections()
+            
+            document_data = {
+                "content": content,
+                "sections": [
+                    {
+                        "id": section.id,
+                        "title": section.title,
+                        "level": section.level,
+                        "start_line": section.line_start,
+                        "end_line": section.line_end
+                    }
+                    for section in sections
+                ],
+                "word_count": len(content.split()),
+                "character_count": len(content)
+            }
+            
+            return EditResult(
+                success=True,
+                operation=EditOperation.BATCH_OPERATIONS,
+                modified_sections=[],
+                errors=[],
+                warnings=[],
+                metadata=document_data
+            )
+        
+        return self.processor.execute_operation(document_path, operation, auto_save=False)
+    
+    def _save_document_impl(self, document_path: str, target_path: Optional[str] = None, backup: bool = True, validation_level: str = "NORMAL") -> Dict[str, Any]:
+        """Implementation for save_document tool."""
+        try:
+            validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
+            validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+            
+            editor = self.processor.load_document(document_path, validation_enum)
+            
+            # Determine save path
+            save_path = target_path if target_path else document_path
+            
+            return self.processor.save_document(editor, save_path, backup)
+        except Exception as e:
+            return self.processor.create_error_response(str(e), type(e).__name__)
+    
+    def _analyze_document_impl(self, document_path: str) -> Dict[str, Any]:
+        """Implementation for analyze_document tool."""
+        def operation(editor):
+            from .safe_editor_types import EditResult, EditOperation
+            
+            content = editor.to_markdown()
+            sections = editor.get_sections()
+            
+            # Basic document analysis
+            lines = content.split('\n')
+            word_count = len(content.split())
+            char_count = len(content)
+            
+            # Section analysis
+            section_levels = {}
+            for section in sections:
+                level = section.level
+                section_levels[level] = section_levels.get(level, 0) + 1
+            
+            analysis_data = {
+                "analysis": {
+                    "total_sections": len(sections),
+                    "section_levels": section_levels,
+                    "word_count": word_count,
+                    "character_count": char_count,
+                    "line_count": len(lines),
+                    "heading_structure": [
+                        {
+                            "id": section.id,
+                            "title": section.title,
+                            "level": section.level
+                        }
+                        for section in sections
+                    ]
+                }
+            }
+            
+            return EditResult(
+                success=True,
+                operation=EditOperation.BATCH_OPERATIONS,
+                modified_sections=[],
+                errors=[],
+                warnings=[],
+                metadata=analysis_data
+            )
+        
+        return self.processor.execute_operation(document_path, operation, auto_save=False)
 
 
-# Create a global server instance
+# Global instances for backward compatibility and direct usage
 server = MarkdownMCPServer()
-
-# Expose the FastMCP instance for direct access if needed
 mcp = server.mcp
-
-# Main entry point
-def main():
-    """Main entry point for running the MCP server."""
-    server.run()
-
-
-if __name__ == "__main__":
-    main()

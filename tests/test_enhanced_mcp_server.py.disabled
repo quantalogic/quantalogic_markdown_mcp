@@ -1,0 +1,193 @@
+"""Unit tests for EnhancedMarkdownMCPServer."""
+
+from pathlib import Path
+
+from quantalogic_markdown_mcp.enhanced_mcp_server import EnhancedMarkdownMCPServer
+from test_utils.stateless_test_helpers import StatelessTestHelper
+
+
+class TestEnhancedMarkdownMCPServer:
+    """Test cases for EnhancedMarkdownMCPServer."""
+    
+    def setup_method(self):
+        """Set up test environment."""
+        self.server = EnhancedMarkdownMCPServer(legacy_mode=True)
+        self.helper = StatelessTestHelper()
+        self.sample_content = self.helper.create_sample_document()
+    
+    def test_load_document_stateless(self):
+        """Test stateless document loading."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Use new stateless API
+        result = self.server.load_document(document_path=str(temp_file))
+        
+        self.helper.assert_operation_success(result)
+        assert result["stateless"] is True
+        assert result["sections_count"] > 0
+        assert "content_preview" in result
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_load_document_legacy(self):
+        """Test legacy document loading."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Use legacy API
+        result = self.server.load_document(file_path=str(temp_file))
+        
+        self.helper.assert_operation_success(result)
+        assert "stateless" not in result or result["stateless"] is False
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_insert_section_stateless(self):
+        """Test stateless section insertion."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.insert_section(
+            document_path=str(temp_file),
+            heading="New Section",
+            content="This is new content",
+            position=1,
+            auto_save=True
+        )
+        
+        self.helper.assert_operation_success(result)
+        assert result.get("saved", False) is True
+        
+        # Verify the change was saved
+        saved_content = temp_file.read_text()
+        assert "New Section" in saved_content
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_insert_section_legacy(self):
+        """Test legacy section insertion."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # First load document in legacy mode
+        self.server.load_document(file_path=str(temp_file))
+        
+        # Then insert section using legacy API
+        result = self.server.insert_section(
+            heading="Legacy Section",
+            content="Legacy content",
+            position=1
+        )
+        
+        self.helper.assert_operation_success(result)
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_backward_compatibility_detection(self):
+        """Test detection of legacy vs new API calls."""
+        # Test legacy call detection
+        assert self.server._is_legacy_call(heading="test", content="test") is True
+        
+        # Test new call detection
+        assert self.server._is_legacy_call(document_path="/path/to/doc.md") is False
+    
+    def test_missing_parameters_error(self):
+        """Test error handling for missing parameters."""
+        # Call with neither document_path nor file_path
+        result = self.server.load_document()
+        
+        self.helper.assert_operation_failure(result, "must be provided")
+    
+    def test_auto_save_parameter(self):
+        """Test auto_save parameter functionality."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        original_content = temp_file.read_text()
+        
+        # Test with auto_save=False
+        result = self.server.insert_section(
+            document_path=str(temp_file),
+            heading="Temp Section",
+            content="Temp content",
+            position=1,
+            auto_save=False
+        )
+        
+        self.helper.assert_operation_success(result)
+        assert result.get("saved", False) is False
+        
+        # Content should be unchanged
+        current_content = temp_file.read_text()
+        assert current_content == original_content
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_backup_parameter(self):
+        """Test backup parameter functionality."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Test with backup=True
+        result = self.server.insert_section(
+            document_path=str(temp_file),
+            heading="Test Section",
+            content="Test content", 
+            position=1,
+            auto_save=True,
+            backup=True
+        )
+        
+        self.helper.assert_operation_success(result)
+        
+        if result.get("saved") and result.get("save_info"):
+            save_info = result["save_info"]
+            assert save_info.get("backup_created", False) is True
+        
+        temp_file.unlink()  # Cleanup
+        backup_file = Path(str(temp_file) + ".bak")
+        if backup_file.exists():
+            backup_file.unlink()
+    
+    def test_list_sections_stateless(self):
+        """Test stateless section listing."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.list_sections(document_path=str(temp_file))
+        
+        self.helper.assert_operation_success(result)
+        assert result["stateless"] is True
+        assert "sections" in result
+        assert result["total_sections"] > 0
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_get_section_stateless(self):
+        """Test stateless section retrieval."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # First get all sections to find a section ID
+        sections_result = self.server.list_sections(document_path=str(temp_file))
+        self.helper.assert_operation_success(sections_result)
+        
+        if sections_result["sections"]:
+            section_id = sections_result["sections"][0]["section_id"]
+            
+            result = self.server.get_section(
+                document_path=str(temp_file),
+                section_id=section_id
+            )
+            
+            self.helper.assert_operation_success(result)
+            assert result["stateless"] is True
+            assert "section" in result
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_get_document_stateless(self):
+        """Test stateless document retrieval."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.get_document(document_path=str(temp_file))
+        
+        self.helper.assert_operation_success(result)
+        assert result["stateless"] is True
+        assert "document" in result
+        assert "statistics" in result
+        assert "Test Document" in result["document"]
+        
+        temp_file.unlink()  # Cleanup

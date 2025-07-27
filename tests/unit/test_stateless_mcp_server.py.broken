@@ -1,0 +1,414 @@
+"""Unit tests for StatelessMarkdownMCPServer."""
+
+import pytest
+import tempfile
+from pathlib import Path
+
+from quantalogic_markdown_mcp.mcp_server import MarkdownMCPServer
+
+# Import test helpers with fallback
+try:
+    from tests.test_utils.stateless_test_helpers import StatelessTestHelper
+except ImportError:
+    # Fallback for running tests directly
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../test_utils'))
+    from stateless_test_helpers import StatelessTestHelper
+
+
+class TestStatelessMarkdownMCPServer:
+    """Test cases for StatelessMarkdownMCPServer."""
+    
+    def setup_method(self):
+        """Set up test environment."""
+        self.server = MarkdownMCPServer("TestServer")
+        self.helper = StatelessTestHelper()
+        self.sample_content = self.helper.create_sample_document()
+    
+    def test_server_initialization(self):
+        """Test server initializes correctly."""
+        assert self.server.mcp is not None
+        assert self.server.processor is not None
+    
+    def test_load_document_stateless(self):
+        """Test stateless document loading."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Call load_document tool using call_tool_sync
+        result = self.server.call_tool_sync("load_document", {"document_path": str(temp_file)})
+        
+        self.helper.assert_operation_success(result)
+        assert result["document_path"] == str(temp_file)
+        assert result["sections_count"] > 0
+        assert result["stateless"] is True
+        assert "Test Document" in result["content_preview"]
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_load_document_not_found(self):
+        """Test loading non-existent document."""
+        result = self.server.call_tool_sync("load_document", {"document_path": "/non/existent/file.md"})
+        
+        self.helper.assert_operation_failure(result, "not found")
+    
+    def test_load_document_validation_levels(self):
+        """Test loading with different validation levels."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        for level in ["STRICT", "NORMAL", "PERMISSIVE"]:
+            result = self.server.call_tool_sync("load_document", {
+                "document_path": str(temp_file), 
+                "validation_level": level
+            })
+            self.helper.assert_operation_success(result)
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_list_sections_stateless(self):
+        """Test stateless section listing."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)})
+        
+        self.helper.assert_operation_success(result)
+        assert "sections" in result
+        assert "total_sections" in result
+        assert len(result["sections"]) > 0
+        
+        # Check section structure
+        first_section = result["sections"][0]
+        assert "id" in first_section
+        assert "title" in first_section
+        assert "level" in first_section
+        assert "content_preview" in first_section
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_get_section_stateless(self):
+        """Test stateless section retrieval."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # First list sections to get a valid section ID
+        list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)})
+        self.helper.assert_operation_success(list_result)
+        
+        section_id = list_result["sections"][0]["id"]
+        
+        # Now get the specific section
+        result = self.server.call_tool_sync("get_section", {
+            "document_path": str(temp_file),
+            "section_id": section_id
+        })
+        
+        self.helper.assert_operation_success(result)
+        assert "section" in result
+        assert result["section"]["id"] == section_id
+        assert "title" in result["section"]
+        assert "content" in result["section"]
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_get_section_not_found(self):
+        """Test getting non-existent section."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.call_tool_sync("get_section", {"document_path": str(temp_file)), "non-existent-id")
+        
+        self.helper.assert_operation_failure(result, "not found")
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_insert_section_stateless(self):
+        """Test stateless section insertion."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.call_tool_sync("insert_section", {"document_path": str(temp_file)), 
+            "New Section", 
+            "This is new content.", 
+            1,
+            auto_save=True,
+            backup=False
+        )
+        
+        self.helper.assert_operation_success(result)
+        assert result["saved"] is True
+        
+        # Verify the section was added
+        list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)))
+        section_titles = [s["title"] for s in list_result["sections"]]
+        assert "New Section" in section_titles
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_insert_section_with_backup(self):
+        """Test section insertion with backup creation.""" 
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        original_content = temp_file.read_text()
+        
+        result = self.server.call_tool_sync("insert_section", {"document_path": str(temp_file)),
+            "New Section",
+            "New content.",
+            1,
+            auto_save=True,
+            backup=True
+        )
+        
+        self.helper.assert_operation_success(result)
+        
+        # Check backup was created
+        backup_file = Path(str(temp_file) + ".bak")
+        assert backup_file.exists()
+        assert backup_file.read_text() == original_content
+        
+        # Cleanup
+        temp_file.unlink()
+        backup_file.unlink()
+    
+    def test_update_section_stateless(self):
+        """Test stateless section update."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Get a section to update
+        list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)))
+        section_id = list_result["sections"][0]["id"]
+        
+        # Update the section
+        new_content = "This is updated content."
+        result = self.server.call_tool_sync("update_section", {"document_path": str(temp_file)),
+            section_id,
+            new_content,
+            auto_save=True,
+            backup=False
+        )
+        
+        self.helper.assert_operation_success(result)
+        
+        # Verify the update
+        get_result = self.server.call_tool_sync("get_section", {"document_path": str(temp_file)), section_id)
+        assert new_content in get_result["section"]["content"]
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_delete_section_by_id_stateless(self):
+        """Test stateless section deletion by ID."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Get a section to delete
+        list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)))
+        original_count = list_result["total_sections"]
+        section_id = list_result["sections"][0]["id"]
+        
+        # Delete the section
+        result = self.server.call_tool_sync("delete_section", {"document_path": str(temp_file)),
+            section_id=section_id,
+            auto_save=True,
+            backup=False
+        )
+        
+        self.helper.assert_operation_success(result)
+        
+        # Verify deletion
+        new_list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)))
+        assert new_list_result["total_sections"] == original_count - 1
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_delete_section_by_heading_stateless(self):
+        """Test stateless section deletion by heading."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Get section info
+        list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)))
+        original_count = list_result["total_sections"]
+        heading_to_delete = list_result["sections"][0]["title"]
+        
+        # Delete by heading
+        result = self.server.call_tool_sync("delete_section", {"document_path": str(temp_file)),
+            heading=heading_to_delete,
+            auto_save=True,
+            backup=False
+        )
+        
+        self.helper.assert_operation_success(result)
+        
+        # Verify deletion
+        new_list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)))
+        assert new_list_result["total_sections"] == original_count - 1
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_move_section_stateless(self):
+        """Test stateless section movement."""
+        # Create a document with multiple sections
+        content = """# Test Document
+
+## Section A
+Content A
+
+## Section B
+Content B
+
+## Section C
+Content C
+"""
+        temp_file = self.helper.create_temp_document(content)
+        
+        # Get section info
+        list_result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)))
+        section_to_move = list_result["sections"][0]["id"]
+        
+        # Move the section
+        result = self.server.call_tool_sync("move_section", {"document_path": str(temp_file)),
+            section_to_move,
+            2,  # Move to position 2
+            auto_save=True,
+            backup=False
+        )
+        
+        self.helper.assert_operation_success(result)
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_get_document_stateless(self):
+        """Test getting complete document."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.call_tool_sync("get_document", {"document_path": str(temp_file)))
+        
+        self.helper.assert_operation_success(result)
+        assert "content" in result
+        assert "sections" in result
+        assert "metadata" in result
+        assert result["document_path"] == str(temp_file)
+        
+        # Check metadata
+        metadata = result["metadata"]
+        assert "total_sections" in metadata
+        assert "total_lines" in metadata
+        assert "file_size" in metadata
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_save_document_stateless(self):
+        """Test stateless document saving."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_file = Path(temp_dir) / "saved_document.md"
+            
+            result = self.server.call_tool_sync("save_document", {"document_path": str(temp_file)),
+                str(target_file),
+                backup=False
+            )
+            
+            self.helper.assert_operation_success(result)
+            assert target_file.exists()
+            assert "Test Document" in target_file.read_text()
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_analyze_document_stateless(self):
+        """Test document analysis."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        result = self.server.call_tool_sync("analyze_document", {"document_path": str(temp_file)))
+        
+        self.helper.assert_operation_success(result)
+        assert "analysis" in result
+        
+        analysis = result["analysis"]
+        assert "structure" in analysis
+        assert "content" in analysis
+        assert "validation" in analysis
+        
+        # Check structure analysis
+        structure = analysis["structure"]
+        assert "total_sections" in structure
+        assert "heading_levels" in structure
+        assert "max_depth" in structure
+        
+        # Check content analysis
+        content_analysis = analysis["content"]
+        assert "total_lines" in content_analysis
+        assert "total_words" in content_analysis
+        assert "total_characters" in content_analysis
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_auto_save_disabled(self):
+        """Test operations with auto_save disabled."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        original_content = temp_file.read_text()
+        
+        # Insert section with auto_save=False
+        result = self.server.call_tool_sync("insert_section", {"document_path": str(temp_file)),
+            "New Section",
+            "New content.",
+            1,
+            auto_save=False,
+            backup=False
+        )
+        
+        self.helper.assert_operation_success(result)
+        # Should not have saved key
+        assert "saved" not in result
+        
+        # File should be unchanged
+        assert temp_file.read_text() == original_content
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_error_handling(self):
+        """Test comprehensive error handling."""
+        # Test with invalid document path
+        result = self.server.call_tool_sync("load_document", {"document_path": "/invalid/path.md"})
+        self.helper.assert_operation_failure(result)
+        
+        # Test operations on non-existent document
+        result = self.server.call_tool_sync("list_sections", {"document_path": "/invalid/path.md"})
+        self.helper.assert_operation_failure(result)
+        
+        # Test with invalid section ID
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        result = self.server.call_tool_sync("update_section", {"document_path": str(temp_file)), "invalid-id", "content"
+        )
+        self.helper.assert_operation_failure(result)
+        
+        temp_file.unlink()  # Cleanup
+    
+    def test_path_resolution(self):
+        """Test path resolution works correctly."""
+        # Test with relative path
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc_path = Path(temp_dir) / "test.md"
+            doc_path.write_text(self.sample_content)
+            
+            # Use relative path
+            import os
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
+                result = self.server.call_tool_sync("load_document", {"document_path": "test.md"})
+                self.helper.assert_operation_success(result)
+            finally:
+                os.chdir(old_cwd)
+    
+    @pytest.mark.parametrize("validation_level", ["STRICT", "NORMAL", "PERMISSIVE"])
+    def test_all_tools_with_validation_levels(self, validation_level):
+        """Test all tools work with different validation levels."""
+        temp_file = self.helper.create_temp_document(self.sample_content)
+        
+        # Test load
+        result = self.server.call_tool_sync("load_document", {"document_path": str(temp_file)), validation_level)
+        self.helper.assert_operation_success(result)
+        
+        # Test list
+        result = self.server.call_tool_sync("list_sections", {"document_path": str(temp_file)), validation_level)
+        self.helper.assert_operation_success(result)
+        
+        # Test analyze
+        result = self.server.call_tool_sync("analyze_document", {"document_path": str(temp_file)), validation_level)
+        self.helper.assert_operation_success(result)
+        
+        temp_file.unlink()  # Cleanup
