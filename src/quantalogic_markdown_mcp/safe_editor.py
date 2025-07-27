@@ -769,7 +769,7 @@ class SafeMarkdownEditor:
                     warnings=[SafeParseError(
                         message="Move operation is simplified - full implementation pending",
                         error_code="SIMPLIFIED_IMPLEMENTATION",
-                        category=ErrorCategory.WARNING
+                        category=ErrorCategory.OPERATION
                     )],
                     metadata={
                         'position': position,
@@ -915,7 +915,7 @@ class SafeMarkdownEditor:
                     warnings.append(SafeParseError(
                         message=f"Large level change from {old_level} to {new_level} may affect document structure",
                         error_code="LARGE_LEVEL_CHANGE",
-                        category=ErrorCategory.WARNING
+                        category=ErrorCategory.STRUCTURE
                     ))
                 
                 return EditResult(

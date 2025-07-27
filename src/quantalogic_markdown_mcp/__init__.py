@@ -29,6 +29,7 @@ from .safe_editor_types import (
     LinkError,
     SafeParseError,
 )
+from .mcp_server import MarkdownMCPServer, server, mcp
 
 __version__ = "0.1.0"
 __author__ = "Raphael Mansuy"
@@ -71,4 +72,9 @@ __all__ = [
     "StructureAnalysis",
     "LinkError",
     "SafeParseError",
+    
+    # MCP Server
+    "MarkdownMCPServer",
+    "server",
+    "mcp",
 ]

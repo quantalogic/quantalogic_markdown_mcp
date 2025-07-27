@@ -24,6 +24,8 @@ classifiers = [
 dependencies = [
     "markdown-it-py>=3.0.0",
     "mdit-py-plugins>=0.4.0",
+    "mcp[cli]>=1.12.0",
+    "fastmcp>=0.9.0",
 ]
 
 [project.optional-dependencies]
