@@ -2,9 +2,12 @@
 
 A Model Context Protocol (MCP) server that provides powerful Markdown document editing capabilities with thread-safe operations, atomic transactions, and comprehensive validation.
 
+
 **📦 Available on PyPI**: [quantalogic-markdown-mcp](https://pypi.org/project/quantalogic-markdown-mcp/)
 
 **🚀 Quick Start**: Install with `uv add quantalogic-markdown-mcp` or `pip install quantalogic-markdown-mcp`
+
+**Current version:** `0.1.2`
 
 ## Features
 
@@ -54,16 +57,17 @@ A Model Context Protocol (MCP) server that provides powerful Markdown document e
 - Python 3.11 or higher
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 
+
 ### Quick Install from PyPI (Recommended)
 
-The package is now available on PyPI! Install it directly:
+The package is available on PyPI! Install the latest version (`0.1.2`) directly:
 
 ```bash
 # Install with uv (recommended)
-uv add quantalogic-markdown-mcp
+uv add quantalogic-markdown-mcp@0.1.2
 
 # Or install with pip
-pip install quantalogic-markdown-mcp
+pip install quantalogic-markdown-mcp==0.1.2
 ```
 
 ### Run Directly with uvx (No Installation Required)
@@ -95,17 +99,19 @@ uv pip install -e .
 
 ### Running the Server
 
+
 #### Method 1: Direct Execution (PyPI Installation)
 
 If you installed from PyPI:
 
 ```bash
-# Run the MCP server directly
+# Run the MCP server directly (ensure version 0.1.2 is installed)
 python -m quantalogic_markdown_mcp.mcp_server
 
 # Or with uvx (no installation required)
 uvx --from quantalogic-markdown-mcp python -m quantalogic_markdown_mcp.mcp_server
 ```
+
 
 #### Method 2: Development Installation
 
@@ -119,14 +125,18 @@ uv run python -m quantalogic_markdown_mcp.mcp_server
 python -m quantalogic_markdown_mcp.mcp_server
 ```
 
+
 #### Method 3: Using the Development Script
 
 For development from source:
 
 ```bash
-# Run the development server
+# Run the development server (dev mode)
 python dev-scripts/run_mcp_server.py
 ```
+
+
+---
 
 ### Connecting to Claude Desktop
 
