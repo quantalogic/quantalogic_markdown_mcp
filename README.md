@@ -281,44 +281,37 @@ To use this MCP server with VSCode and GitHub Copilot, you have several configur
 
 Create a `.vscode/mcp.json` file in your workspace root to share the configuration with your team:
 
-**Option 1: Using PyPI Installation**
+**Option 1: Development Installation (Recommended)**
+
+For this project, use the development setup since you're working with the source code:
 
 ```json
 {
   "servers": {
     "markdown-editor": {
       "type": "stdio",
-      "command": "python",
+      "command": "uv",
       "args": [
-        "-m",
-        "quantalogic_markdown_mcp.mcp_server"
-      ]
-    }
-  }
-}
-```
-
-**Option 2: Using uvx (No Installation Required)**
-
-```json
-{
-  "servers": {
-    "markdown-editor": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "--from",
-        "quantalogic-markdown-mcp",
+        "--directory",
+        "${workspaceFolder}",
+        "run",
+        "--",
         "python",
         "-m",
         "quantalogic_markdown_mcp.mcp_server"
-      ]
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
     }
   }
 }
 ```
 
-**Option 3: Development Installation**
+**Option 2: Using Direct Script Path**
+
+Alternative approach using the script path directly:
 
 ```json
 {
@@ -331,10 +324,28 @@ Create a `.vscode/mcp.json` file in your workspace root to share the configurati
         "${workspaceFolder}",
         "run",
         "python",
-        "-m",
-        "quantalogic_markdown_mcp.mcp_server"
+        "src/quantalogic_markdown_mcp/mcp_server.py"
       ],
       "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+**Option 3: Using PyPI Installation (If Installed Globally)**
+
+Only use this if you have installed the package globally:
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
     }
   }
 }
@@ -837,12 +848,40 @@ Thank you for reading!
 
 **VSCode MCP server not starting:**
 
-1. Check the MCP server output: Right-click server → Show Output
-2. Verify the command path and arguments in your configuration
-3. Test the command manually in a terminal from the correct working directory
-4. Ensure all required dependencies are installed (`uv sync`)
-5. Check file permissions on the server executable
-6. For dev containers, verify the container has access to required tools
+1. **Check the MCP server output**: Right-click server → Show Output
+2. **For development setup**: Ensure you're using the correct configuration:
+   ```json
+   {
+     "servers": {
+       "markdown-editor": {
+         "type": "stdio",
+         "command": "uv",
+         "args": [
+           "--directory",
+           "${workspaceFolder}",
+           "run",
+           "--",
+           "python",
+           "-m",
+           "quantalogic_markdown_mcp.mcp_server"
+         ],
+         "cwd": "${workspaceFolder}",
+         "env": {
+           "PYTHONPATH": "${workspaceFolder}/src"
+         }
+       }
+     }
+   }
+   ```
+3. **Verify the command path and arguments** in your configuration
+4. **Test the command manually** in a terminal from the correct working directory:
+   ```bash
+   cd /path/to/quantalogic-markdown-edit-mcp
+   uv run -- python -m quantalogic_markdown_mcp.mcp_server
+   ```
+5. **Ensure all required dependencies are installed**: `uv sync`
+6. **Check file permissions** on the server executable
+7. **For dev containers**, verify the container has access to required tools
 
 **VSCode agent mode not showing MCP tools:**
 
