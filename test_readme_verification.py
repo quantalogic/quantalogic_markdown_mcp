@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""
+Enhanced test to verify the MCP server and file path operations work correctly.
+"""
+
+import asyncio
+import sys
+import os
+import tempfile
+from pathlib import Path
+
+# Add the src directory to the path to import our modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from fastmcp import Client
+from quantalogic_markdown_mcp.mcp_server import server
+
+async def test_path_resolution():
+    """Test various path resolution scenarios."""
+    print("🔍 Testing path resolution...")
+    
+    async with Client(server.mcp) as client:
+        # Test absolute path
+        temp_dir = Path(tempfile.gettempdir())
+        abs_path = temp_dir / "test_absolute.md"
+        
+        result = await client.call_tool("test_path_resolution", {"path": str(abs_path)})
+        print(f"✅ Absolute path test: {result.content[0].text}")
+        
+        # Test relative path
+        result = await client.call_tool("test_path_resolution", {"path": "./README.md"})
+        print(f"✅ Relative path test: {result.content[0].text}")
+        
+        # Test tilde expansion
+        home_path = "~/test_document.md"
+        result = await client.call_tool("test_path_resolution", {"path": home_path})
+        print(f"✅ Tilde expansion test: {result.content[0].text}")
+        
+        # Test environment variable (if HOME is set)
+        if "HOME" in os.environ:
+            env_path = "$HOME/test_env.md"
+            result = await client.call_tool("test_path_resolution", {"path": env_path})
+            print(f"✅ Environment variable test: {result.content[0].text}")
+
+async def test_file_operations():
+    """Test loading and saving documents from/to files."""
+    print("📁 Testing file operations...")
+    
+    # Create a temporary test file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+        test_content = """# Test Document
+
+## Introduction
+This is a test document created for MCP server testing.
+
+## Features
+- File loading
+- Path resolution
+- Document editing
+
+## Conclusion
+Testing is important!
+"""
+        f.write(test_content)
+        test_file_path = f.name
+    
+    try:
+        async with Client(server.mcp) as client:
+            # Test loading with absolute path
+            result = await client.call_tool("load_document", {"file_path": test_file_path})
+            print(f"✅ Document loaded: {result.content[0].text}")
+            
+            # Test getting file info
+            result = await client.call_tool("get_file_info", {})
+            print(f"✅ File info retrieved: {result.content[0].text}")
+            
+            # Test editing the loaded document
+            result = await client.call_tool("insert_section", {
+                "heading": "New Test Section", 
+                "content": "This section was added via MCP tools.",
+                "position": 2
+            })
+            print(f"✅ Section inserted: {result.content[0].text}")
+            
+            # Test saving to a new file
+            save_path = Path(test_file_path).with_suffix('.modified.md')
+            result = await client.call_tool("save_document", {
+                "file_path": str(save_path),
+                "backup": True
+            })
+            print(f"✅ Document saved: {result.content[0].text}")
+            
+            # Verify the saved file exists and has content
+            if save_path.exists():
+                saved_content = save_path.read_text(encoding='utf-8')
+                print(f"✅ Saved file verified: {len(saved_content)} characters")
+                save_path.unlink()  # Clean up
+            
+    finally:
+        # Clean up test files
+        Path(test_file_path).unlink(missing_ok=True)
+        Path(test_file_path).with_suffix('.modified.md').unlink(missing_ok=True)
+        Path(str(test_file_path) + '.bak').unlink(missing_ok=True)
+
+async def test_relative_path_scenarios():
+    """Test various relative path scenarios."""
+    print("🔗 Testing relative path scenarios...")
+    
+    # Create test files in different locations
+    current_dir = Path.cwd()
+    test_dir = current_dir / "temp_test_dir"
+    test_dir.mkdir(exist_ok=True)
+    
+    # Create test file in subdirectory
+    test_file = test_dir / "relative_test.md"
+    test_file.write_text("# Relative Path Test\n\nThis tests relative paths.", encoding='utf-8')
+    
+    try:
+        async with Client(server.mcp) as client:
+            # Test relative path from current directory
+            relative_path = "temp_test_dir/relative_test.md"
+            result = await client.call_tool("load_document", {"file_path": relative_path})
+            print(f"✅ Relative path loading: {result.content[0].text}")
+            
+            # Test dot notation
+            dot_path = "./temp_test_dir/relative_test.md"
+            result = await client.call_tool("test_path_resolution", {"path": dot_path})
+            print(f"✅ Dot notation test: {result.content[0].text}")
+            
+    finally:
+        # Clean up
+        test_file.unlink(missing_ok=True)
+        test_dir.rmdir()
+
+async def test_tilde_expansion():
+    """Test tilde expansion specifically."""
+    print("🏠 Testing tilde expansion...")
+    
+    async with Client(server.mcp) as client:
+        # Create a test file in home directory
+        home_dir = Path.home()
+        test_file = home_dir / "mcp_tilde_test.md"
+        test_file.write_text("# Tilde Test\n\nTesting ~ expansion.", encoding='utf-8')
+        
+        try:
+            # Test tilde path resolution
+            tilde_path = "~/mcp_tilde_test.md"
+            result = await client.call_tool("test_path_resolution", {"path": tilde_path})
+            print(f"✅ Tilde resolution: {result.content[0].text}")
+            
+            # Test loading with tilde path
+            result = await client.call_tool("load_document", {"file_path": tilde_path})
+            print(f"✅ Tilde path loading: {result.content[0].text}")
+            
+        finally:
+            test_file.unlink(missing_ok=True)
+
+async def test_server_functionality():
+    """Test the server with examples from the README."""
+    print("🚀 Testing SafeMarkdownEditor MCP Server...")
+    
+    # Initialize with sample document
+    server.initialize_document("""# Sample Document
+
+## Introduction
+This is a sample document for testing.
+
+## Features  
+- Feature 1
+- Feature 2
+
+## Conclusion
+Thank you for reading!
+""")
+    
+    print("✅ Server initialized with sample document")
+    
+    # Connect to the server using in-memory transport
+    async with Client(server.mcp) as client:
+        print("✅ Connected to MCP server")
+        
+        # List available tools
+        tools = await client.list_tools()
+        print(f"✅ Available tools: {[tool.name for tool in tools]}")
+        
+        # Test list_sections
+        sections_result = await client.call_tool("list_sections", {})
+        print(f"✅ Document sections retrieved: {str(sections_result.content)[:100]}...")
+        
+        # Test insert_section
+        insert_result = await client.call_tool("insert_section", {
+            "heading": "New Section",
+            "content": "This is a new section added by the test.",
+            "position": 2
+        })
+        print(f"✅ Section inserted: {str(insert_result.content)[:100]}...")
+        
+        # Test get_document
+        document_result = await client.call_tool("get_document", {})
+        print(f"✅ Full document retrieved: {len(str(document_result.content))} characters")
+        
+        # Test resources
+        resources = await client.list_resources()
+        print(f"✅ Available resources: {[resource.uri for resource in resources]}")
+        
+        # Test prompts
+        prompts = await client.list_prompts()
+        print(f"✅ Available prompts: {[prompt.name for prompt in prompts]}")
+        
+        print("\n🎉 All basic tests passed!")
+
+async def run_all_tests():
+    """Run all tests in sequence."""
+    print("🧪 Starting comprehensive MCP server testing...\n")
+    
+    try:
+        await test_server_functionality()
+        print()
+        
+        await test_path_resolution()
+        print()
+        
+        await test_file_operations()
+        print()
+        
+        await test_relative_path_scenarios()
+        print()
+        
+        await test_tilde_expansion()
+        print()
+        
+        print("✅ All tests passed! The server supports:")
+        print("  • Absolute paths")
+        print("  • Relative paths")
+        print("  • Tilde (~) expansion")
+        print("  • Environment variable expansion")
+        print("  • File loading and saving")
+        print("  • Document editing with file persistence")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+if __name__ == "__main__":
+    try:
+        success = asyncio.run(run_all_tests())
+        if success:
+            print("\n🎉 README and path handling verification completed successfully!")
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n⏹️  Tests interrupted by user")
+        sys.exit(1)

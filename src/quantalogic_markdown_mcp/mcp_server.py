@@ -5,8 +5,10 @@ This module implements a Model Context Protocol (MCP) server that exposes
 the SafeMarkdownEditor functionality as MCP tools, resources, and prompts.
 """
 
+import os
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -31,6 +33,7 @@ class MarkdownMCPServer:
         """Initialize the MCP server."""
         self.mcp = FastMCP(server_name)
         self.editor: Optional[SafeMarkdownEditor] = None
+        self.current_file_path: Optional[Path] = None
         self.lock = threading.RLock()
         self.document_metadata = {
             "title": "Untitled Document",
@@ -42,6 +45,152 @@ class MarkdownMCPServer:
         self._setup_tools()
         self._setup_resources()
         self._setup_prompts()
+    
+    def _resolve_path(self, path_str: str) -> Path:
+        """
+        Resolve a path string to an absolute Path object.
+        
+        Handles:
+        - Absolute paths
+        - Relative paths (relative to current working directory)
+        - Tilde expansion for home directory
+        - Environment variable expansion
+        
+        Args:
+            path_str: The path string to resolve
+            
+        Returns:
+            Resolved absolute Path object
+            
+        Raises:
+            ValueError: If the path cannot be resolved
+        """
+        try:
+            # Expand environment variables and user home directory
+            expanded_path = os.path.expandvars(os.path.expanduser(path_str))
+            
+            # Create Path object and resolve to absolute path
+            path = Path(expanded_path).resolve()
+            
+            return path
+        except Exception as e:
+            raise ValueError(f"Could not resolve path '{path_str}': {e}")
+    
+    def _validate_file_path(self, path: Path, must_exist: bool = True, must_be_file: bool = True) -> None:
+        """
+        Validate a file path for various conditions.
+        
+        Args:
+            path: The path to validate
+            must_exist: Whether the path must exist
+            must_be_file: Whether the path must be a file (not directory)
+            
+        Raises:
+            FileNotFoundError: If must_exist=True and path doesn't exist
+            IsADirectoryError: If must_be_file=True and path is a directory
+            PermissionError: If path is not readable/writable
+        """
+        if must_exist and not path.exists():
+            raise FileNotFoundError(f"Path does not exist: {path}")
+        
+        if path.exists():
+            if must_be_file and path.is_dir():
+                raise IsADirectoryError(f"Path is a directory, not a file: {path}")
+            
+            if not os.access(path, os.R_OK):
+                raise PermissionError(f"No read permission for path: {path}")
+    
+    def load_document_from_file(self, file_path: str, validation_level: ValidationLevel = ValidationLevel.NORMAL) -> None:
+        """
+        Load a Markdown document from a file path.
+        
+        Args:
+            file_path: Path to the Markdown file (supports absolute, relative, and ~ expansion)
+            validation_level: Validation level for the editor
+            
+        Raises:
+            FileNotFoundError: If the file doesn't exist
+            PermissionError: If the file can't be read
+            ValueError: If the path is invalid
+        """
+        with self.lock:
+            # Resolve and validate the path
+            resolved_path = self._resolve_path(file_path)
+            self._validate_file_path(resolved_path, must_exist=True, must_be_file=True)
+            
+            # Read the file content
+            try:
+                content = resolved_path.read_text(encoding='utf-8')
+            except UnicodeDecodeError:
+                # Try with different encodings
+                for encoding in ['utf-8-sig', 'latin1', 'cp1252']:
+                    try:
+                        content = resolved_path.read_text(encoding=encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                else:
+                    raise ValueError(f"Could not decode file {resolved_path} with any supported encoding")
+            
+            # Initialize the editor with the content
+            self.editor = SafeMarkdownEditor(
+                markdown_text=content,
+                validation_level=validation_level
+            )
+            
+            # Update metadata
+            self.current_file_path = resolved_path
+            self.document_metadata.update({
+                "title": resolved_path.stem,
+                "file_path": str(resolved_path),
+                "modified": datetime.now().isoformat(),
+                "file_size": len(content),
+                "encoding": "utf-8"
+            })
+    
+    def save_document_to_file(self, file_path: Optional[str] = None, backup: bool = True) -> None:
+        """
+        Save the current document to a file.
+        
+        Args:
+            file_path: Path to save to (if None, uses current file path)
+            backup: Whether to create a backup of existing file
+            
+        Raises:
+            ValueError: If no file path is specified and no current file is set
+            PermissionError: If the file can't be written
+        """
+        with self.lock:
+            if self.editor is None:
+                raise ValueError("No document loaded")
+            
+            # Determine the target path
+            if file_path is not None:
+                target_path = self._resolve_path(file_path)
+            elif self.current_file_path is not None:
+                target_path = self.current_file_path
+            else:
+                raise ValueError("No file path specified and no current file loaded")
+            
+            # Create parent directories if they don't exist
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Create backup if requested and file exists
+            if backup and target_path.exists():
+                backup_path = target_path.with_suffix(f"{target_path.suffix}.bak")
+                backup_path.write_bytes(target_path.read_bytes())
+            
+            # Save the document
+            content = self.editor.to_markdown()
+            target_path.write_text(content, encoding='utf-8')
+            
+            # Update metadata
+            self.current_file_path = target_path
+            self.document_metadata.update({
+                "file_path": str(target_path),
+                "modified": datetime.now().isoformat(),
+                "file_size": len(content)
+            })
     
     def initialize_document(self, 
                            markdown_text: str = "# Untitled Document\n\nStart writing your content here.",
@@ -84,6 +233,160 @@ class MarkdownMCPServer:
     
     def _setup_tools(self) -> None:
         """Register all MCP tools."""
+        
+        @self.mcp.tool()
+        def load_document(file_path: str, validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Load a Markdown document from a file path.
+            
+            Supports absolute paths, relative paths, and tilde (~) expansion.
+            
+            Args:
+                file_path: Path to the Markdown file (e.g., "/path/to/file.md", "./docs/readme.md", "~/Documents/notes.md")
+                validation_level: Validation strictness - "STRICT", "NORMAL", or "PERMISSIVE"
+            """
+            try:
+                # Convert string validation level to enum
+                validation_map = {
+                    "STRICT": ValidationLevel.STRICT,
+                    "NORMAL": ValidationLevel.NORMAL,
+                    "PERMISSIVE": ValidationLevel.PERMISSIVE
+                }
+                validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
+                
+                # Load the document
+                self.load_document_from_file(file_path, validation_enum)
+                
+                # Get document info
+                sections = self.editor.get_sections()
+                content_preview = self.editor.to_markdown()[:200] + "..." if len(self.editor.to_markdown()) > 200 else self.editor.to_markdown()
+                
+                return {
+                    "success": True,
+                    "message": f"Successfully loaded document from {self.current_file_path}",
+                    "file_path": str(self.current_file_path),
+                    "sections_count": len(sections),
+                    "content_preview": content_preview,
+                    "file_size": self.document_metadata.get("file_size", 0)
+                }
+                
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "suggestions": [
+                        "Check that the file path exists and is readable",
+                        "Ensure the file is a valid Markdown document",
+                        "Try using an absolute path if relative path fails"
+                    ]
+                }
+        
+        @self.mcp.tool()
+        def save_document(file_path: Optional[str] = None, backup: bool = True) -> Dict[str, Any]:
+            """
+            Save the current document to a file.
+            
+            Args:
+                file_path: Path to save to (if not provided, saves to current file)
+                backup: Whether to create a backup of existing file
+            """
+            try:
+                self.save_document_to_file(file_path, backup)
+                
+                return {
+                    "success": True,
+                    "message": f"Successfully saved document to {self.current_file_path}",
+                    "file_path": str(self.current_file_path),
+                    "backup_created": backup and Path(str(self.current_file_path) + ".bak").exists()
+                }
+                
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "suggestions": [
+                        "Ensure you have write permissions for the target directory",
+                        "Check that the parent directory exists",
+                        "Load a document first if none is currently loaded"
+                    ]
+                }
+        
+        @self.mcp.tool()
+        def get_file_info() -> Dict[str, Any]:
+            """Get information about the currently loaded file."""
+            with self.lock:
+                if self.current_file_path is None:
+                    return {
+                        "success": False,
+                        "error": "No file currently loaded",
+                        "suggestions": ["Use load_document to load a file first"]
+                    }
+                
+                try:
+                    path = self.current_file_path
+                    stat = path.stat()
+                    
+                    return {
+                        "success": True,
+                        "file_path": str(path),
+                        "absolute_path": str(path.resolve()),
+                        "file_name": path.name,
+                        "file_stem": path.stem,
+                        "file_suffix": path.suffix,
+                        "file_size": stat.st_size,
+                        "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        "is_writable": os.access(path, os.W_OK),
+                        "is_readable": os.access(path, os.R_OK)
+                    }
+                    
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "error": f"Could not get file info: {e}",
+                        "suggestions": ["Check that the file still exists"]
+                    }
+        
+        @self.mcp.tool()
+        def test_path_resolution(path: str) -> Dict[str, Any]:
+            """
+            Test path resolution to verify absolute, relative, and tilde expansion works.
+            
+            Args:
+                path: The path to test (can be absolute, relative, or use ~ for home)
+            """
+            try:
+                resolved_path = self._resolve_path(path)
+                
+                return {
+                    "success": True,
+                    "original_path": path,
+                    "resolved_path": str(resolved_path),
+                    "absolute_path": str(resolved_path.resolve()),
+                    "exists": resolved_path.exists(),
+                    "is_file": resolved_path.is_file() if resolved_path.exists() else None,
+                    "is_directory": resolved_path.is_dir() if resolved_path.exists() else None,
+                    "is_readable": os.access(resolved_path, os.R_OK) if resolved_path.exists() else None,
+                    "is_writable": os.access(resolved_path, os.W_OK) if resolved_path.exists() else None,
+                    "parent_exists": resolved_path.parent.exists(),
+                    "expansion_info": {
+                        "tilde_expanded": os.path.expanduser(path) != path,
+                        "env_vars_expanded": os.path.expandvars(os.path.expanduser(path)) != os.path.expanduser(path),
+                        "is_absolute": Path(path).is_absolute(),
+                        "is_relative": not Path(path).is_absolute()
+                    }
+                }
+                
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "original_path": path,
+                    "suggestions": [
+                        "Check the path syntax",
+                        "Ensure environment variables exist if used",
+                        "Verify parent directories exist for relative paths"
+                    ]
+                }
         
         @self.mcp.tool()
         def insert_section(heading: str, content: str, position: int) -> Dict[str, Any]:
