@@ -1,0 +1,6 @@
+# Include all files in the package
+recursive-include src/quantalogic_markdown_mcp *
+
+# Include the README and LICENSE
+include README.md
+include LICENSE
