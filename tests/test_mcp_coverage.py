@@ -71,37 +71,41 @@ class TestMCPServerCoverage:
             warnings=[],
             metadata={'changes_made': ['Added section']}
         )
-        result.section_ref = section_ref
-        result.changes_made = ['Test change']
-        result.message = "Success message"
         
         response = server._handle_edit_result(result)
         
         assert response['success'] is True
-        assert response['message'] == "Success message"
-        assert response['section_id'] == "test_id"
-        assert response['changes_made'] == ['Test change']
+        assert response['message'] == "Operation completed successfully"
+        assert response['operation'] == "insert_section"
+        assert 'modified_sections' in response
+        assert len(response['modified_sections']) == 1
+        assert response['modified_sections'][0]['id'] == "test_id"
 
     def test_handle_edit_result_failure(self, server):
         """Test _handle_edit_result with failed result."""
         from quantalogic_markdown_mcp.safe_editor_types import EditResult, EditOperation
+        from quantalogic_markdown_mcp.types import ParseError, ErrorLevel
+        
+        error = ParseError(
+            message="Test error", 
+            line_number=1,
+            level=ErrorLevel.ERROR
+        )
         
         result = EditResult(
             success=False,
             operation=EditOperation.INSERT_SECTION,
             modified_sections=[],
-            errors=[],
+            errors=[error],
             warnings=[],
             metadata={}
         )
-        result.error_message = "Test error"
-        result.suggestions = ["Try again"]
         
         response = server._handle_edit_result(result)
         
         assert response['success'] is False
-        assert response['error'] == "Test error"
-        assert response['suggestions'] == ["Try again"]
+        assert "Test error" in response['error']
+        assert response['operation'] == "insert_section"
 
     def test_server_lock_usage(self, server):
         """Test that server lock is used properly."""

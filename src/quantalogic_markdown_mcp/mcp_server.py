@@ -214,21 +214,32 @@ class MarkdownMCPServer:
         if result.success:
             response = {
                 "success": True,
-                "message": result.message or "Operation completed successfully"
+                "message": "Operation completed successfully"
             }
-            if result.section_ref:
-                response["section_id"] = result.section_ref.id
-            if result.changes_made:
-                response["changes_made"] = result.changes_made
+            # Add information about modified sections
+            if result.modified_sections:
+                response["modified_sections"] = [
+                    {"id": section.id, "title": section.title, "level": section.level}
+                    for section in result.modified_sections
+                ]
                 self.document_metadata["modified"] = datetime.now().isoformat()
+            
+            # Include operation type
+            response["operation"] = result.operation.value
+            
+            # Add preview if available
+            if result.preview:
+                response["preview"] = result.preview
+                
             return response
         else:
             # Return error information but don't raise exception
             # Let MCP handle the error response format
+            error_messages = [str(error) for error in result.errors]
             return {
-                "success": False,
-                "error": result.error_message or "Operation failed",
-                "suggestions": result.suggestions
+                "success": False,  
+                "error": "; ".join(error_messages) if error_messages else "Operation failed",
+                "operation": result.operation.value
             }
     
     def _setup_tools(self) -> None:

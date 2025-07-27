@@ -161,6 +161,181 @@ To use this MCP server with Claude Desktop, add the following configuration to y
 
 After adding the configuration, restart Claude Desktop.
 
+### Connecting to VSCode
+
+To use this MCP server with VSCode and GitHub Copilot, you have several configuration options depending on your needs.
+
+**Prerequisites:**
+
+- VSCode 1.102 or later
+- GitHub Copilot extension installed and configured
+- MCP support enabled in your organization (if applicable)
+
+#### Workspace Configuration (Recommended for Projects)
+
+Create a `.vscode/mcp.json` file in your workspace root to share the configuration with your team:
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${workspaceFolder}",
+        "run",
+        "python",
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+**For Windows:**
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio", 
+      "command": "uv.exe",
+      "args": [
+        "--directory",
+        "${workspaceFolder}",
+        "run",
+        "python", 
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+#### User Configuration (Global Settings)
+
+For system-wide access across all workspaces:
+
+1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Run `MCP: Open User Configuration`
+3. Add the server configuration:
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/ABSOLUTE/PATH/TO/quantalogic-markdown-edit-mcp",
+        "run",
+        "python",
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+#### Development Container Support
+
+For containerized development environments, add to your `devcontainer.json`:
+
+```json
+{
+  "image": "mcr.microsoft.com/devcontainers/python:latest",
+  "customizations": {
+    "vscode": {
+      "mcp": {
+        "servers": {
+          "markdown-editor": {
+            "type": "stdio",
+            "command": "uv",
+            "args": [
+              "--directory", 
+              "${containerWorkspaceFolder}",
+              "run",
+              "python",
+              "-m", 
+              "quantalogic_markdown_mcp.mcp_server"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### Alternative Installation Methods
+
+**Command Line Installation:**
+
+```bash
+code --add-mcp '{"name":"markdown-editor","command":"uv","args":["--directory","/ABSOLUTE/PATH/TO/quantalogic-markdown-edit-mcp","run","python","-m","quantalogic_markdown_mcp.mcp_server"]}'
+```
+
+**URL Installation:**
+You can create installation links using the VSCode URL handler format:
+
+```text
+vscode:mcp/install?%7B%22name%22%3A%22markdown-editor%22%2C%22command%22%3A%22uv%22%2C%22args%22%3A%5B%22--directory%22%2C%22%2FABSOLUTE%2FPATH%2FTO%2Fquantalogic-markdown-edit-mcp%22%2C%22run%22%2C%22python%22%2C%22-m%22%2C%22quantalogic_markdown_mcp.mcp_server%22%5D%7D
+```
+
+#### Using the MCP Server in VSCode
+
+Once configured:
+
+1. Open the Chat view (`Ctrl+Cmd+I` / `Ctrl+Alt+I`)
+2. Select **Agent mode** from the dropdown
+3. Click the **Tools** button to see available MCP tools
+4. Enable the markdown-editor tools you want to use
+5. Start chatting with commands like:
+   - "Load the README.md file and show me all sections"
+   - "Create a new section called 'Installation' with setup instructions"
+   - "Move the 'Features' section to be the first section"
+
+**Managing MCP Servers:**
+
+- View installed servers: `MCP: List Servers`
+- Manage servers: Go to Extensions view (`Ctrl+Shift+X`) → MCP SERVERS section
+- View server logs: Right-click server → Show Output
+- Start/Stop servers: Right-click server → Start/Stop/Restart
+
+**Development and Debugging:**
+
+For development, you can enable watch mode and debugging in your `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${workspaceFolder}",
+        "run", 
+        "python",
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ],
+      "dev": {
+        "watch": "src/**/*.py",
+        "debug": { "type": "python" }
+      }
+    }
+  }
+}
+```
+
 ## Working with Files
 
 The MCP server supports loading and saving Markdown documents from various file path formats:
@@ -463,6 +638,33 @@ Thank you for reading!
 2. Verify that `uv` is in your PATH (`which uv` on macOS/Linux, `where uv` on Windows)
 3. Restart Claude Desktop after configuration changes
 4. Check Claude Desktop logs for error messages
+
+**Server not appearing in VSCode:**
+
+1. Ensure VSCode 1.102 or later is installed
+2. Verify GitHub Copilot extension is installed and active
+3. Check that MCP support is enabled in your organization settings
+4. Confirm `.vscode/mcp.json` file exists in workspace root (for workspace config)
+5. Use `MCP: List Servers` command to see if server is registered
+6. Check Extensions view → MCP SERVERS section for server status
+7. Verify `uv` is in your PATH and accessible from VSCode's integrated terminal
+
+**VSCode MCP server not starting:**
+
+1. Check the MCP server output: Right-click server → Show Output
+2. Verify the command path and arguments in your configuration
+3. Test the command manually in a terminal from the correct working directory
+4. Ensure all required dependencies are installed (`uv sync`)
+5. Check file permissions on the server executable
+6. For dev containers, verify the container has access to required tools
+
+**VSCode agent mode not showing MCP tools:**
+
+1. Confirm you're in Agent mode (not Ask mode) in the Chat view
+2. Click the Tools button to enable/disable specific MCP tools
+3. Check if you have more than 128 tools enabled (VSCode limit)
+4. Verify the MCP server is running (green indicator in Extensions view)
+5. Try restarting the MCP server: Right-click → Restart
 
 **Tool execution errors:**
 
