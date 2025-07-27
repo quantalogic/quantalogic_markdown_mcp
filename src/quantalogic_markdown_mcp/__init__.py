@@ -16,6 +16,19 @@ from .renderers import (
 )
 from .ast_utils import ASTWrapper
 from .types import ParseResult, ParseError, ErrorLevel
+from .safe_editor import SafeMarkdownEditor
+from .safe_editor_types import (
+    SectionReference,
+    EditOperation,
+    EditResult,
+    EditTransaction,
+    ValidationLevel,
+    ErrorCategory,
+    DocumentStatistics,
+    StructureAnalysis,
+    LinkError,
+    SafeParseError,
+)
 
 __version__ = "0.1.0"
 __author__ = "Raphael Mansuy"
@@ -45,4 +58,17 @@ __all__ = [
     "ParseResult",
     "ParseError",
     "ErrorLevel",
+    
+    # Safe Editor
+    "SafeMarkdownEditor",
+    "SectionReference",
+    "EditOperation",
+    "EditResult",
+    "EditTransaction",
+    "ValidationLevel",
+    "ErrorCategory",
+    "DocumentStatistics",
+    "StructureAnalysis",
+    "LinkError",
+    "SafeParseError",
 ]
