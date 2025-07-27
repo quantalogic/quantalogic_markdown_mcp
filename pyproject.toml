@@ -1,7 +1,7 @@
 
 [project]
 name = "quantalogic-markdown-mcp"
-version = "0.1.2"
+version = "0.2.0"
 description = "A flexible and extensible Markdown parser with AST support"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -49,6 +49,9 @@ Homepage = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp"
 Repository = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp"
 Documentation = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp/docs"
 Issues = "https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp/issues"
+
+[project.scripts]
+quantalogic-markdown-mcp = "quantalogic_markdown_mcp.cli:main"
 
 
 [tool.hatch.build.targets.wheel]

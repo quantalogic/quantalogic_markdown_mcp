@@ -37,6 +37,17 @@ class EditOperation(Enum):
     BATCH_OPERATIONS = "batch_operations"
 
 
+class OperationType(Enum):
+    """Operation types for edit results."""
+    INSERT = "insert"
+    UPDATE = "update"
+    DELETE = "delete"
+    MOVE = "move"
+    ANALYZE = "analyze"
+    LOAD = "load"
+    SAVE = "save"
+
+
 @dataclass(frozen=True)
 class SectionReference:
     """Immutable reference to a document section."""

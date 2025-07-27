@@ -1,0 +1,22 @@
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio", 
+      "command": "python",
+      "args": ["-m", "quantalogic_markdown_mcp.mcp_server"],
+      "cwd": "${workspaceFolder}",
+      "dev": {
+        "command": "uv",
+        "args": [
+          "--directory", 
+          "${workspaceFolder}",
+          "run",
+          "python",
+          "-c",
+          "import sys; sys.path.insert(0, 'src'); from quantalogic_markdown_mcp.mcp_server import mcp; mcp.run()"
+        ],
+        "watch": "src/**/*.py"
+      }
+    }
+  }
+}

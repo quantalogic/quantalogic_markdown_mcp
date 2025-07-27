@@ -486,7 +486,7 @@ class MarkdownMCPServer:
                             "suggestions": ["Provide section_id or heading parameter"]
                         }
                     
-                    result = editor.delete_section(section_ref, cascade=True)
+                    result = editor.delete_section(section_ref, preserve_subsections=False)
                     return self._handle_edit_result(result)
                     
                 except Exception as e:

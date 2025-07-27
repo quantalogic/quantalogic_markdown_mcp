@@ -1,0 +1,12 @@
+# Test Document for Header Duplication Fix
+
+## Introduction
+
+This is a test document to verify the header duplication fix.
+
+## Chapter 1
+This is NEW content for Chapter 1 that includes the header.
+This should NOT cause duplication.
+## Chapter 2
+
+This is content for Chapter 2.

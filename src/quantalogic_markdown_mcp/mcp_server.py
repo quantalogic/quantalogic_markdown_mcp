@@ -105,7 +105,9 @@ class MarkdownMCPServer:
                         return EditResult(
                             success=False,
                             operation=OperationType.INSERT,
-                            errors=["Cannot insert into empty document"]
+                            modified_sections=[],
+                            errors=["Cannot insert into empty document"],
+                            warnings=[]
                         )
                 else:
                     if position-1 < len(sections):
@@ -121,7 +123,9 @@ class MarkdownMCPServer:
                         return EditResult(
                             success=False,
                             operation=OperationType.INSERT,
-                            errors=[f"Position {position} is out of range"]
+                            modified_sections=[],
+                            errors=[f"Position {position} is out of range"],
+                            warnings=[]
                         )
             
             validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
@@ -153,7 +157,9 @@ class MarkdownMCPServer:
                         return EditResult(
                             success=False,
                             operation=OperationType.DELETE,
-                            errors=[f"Section with ID '{section_id}' not found"]
+                            modified_sections=[],
+                            errors=[f"Section with ID '{section_id}' not found"],
+                            warnings=[]
                         )
                 elif heading:
                     # Find section by heading
@@ -164,7 +170,9 @@ class MarkdownMCPServer:
                         return EditResult(
                             success=False,
                             operation=OperationType.DELETE,
-                            errors=[f"Section with heading '{heading}' not found"]
+                            modified_sections=[],
+                            errors=[f"Section with heading '{heading}' not found"],
+                            warnings=[]
                         )
                     section_ref = matching_sections[0]
                 else:
@@ -172,10 +180,12 @@ class MarkdownMCPServer:
                     return EditResult(
                         success=False,
                         operation=OperationType.DELETE,
-                        errors=["Either section_id or heading must be provided"]
+                        modified_sections=[],
+                        errors=["Either section_id or heading must be provided"],
+                        warnings=[]
                     )
                 
-                return editor.delete_section(section_ref, cascade=True)
+                return editor.delete_section(section_ref, preserve_subsections=False)
             
             validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
             validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)
@@ -204,7 +214,9 @@ class MarkdownMCPServer:
                     return EditResult(
                         success=False,
                         operation=OperationType.UPDATE,
-                        errors=[f"Section with ID '{section_id}' not found"]
+                        modified_sections=[],
+                        errors=[f"Section with ID '{section_id}' not found"],
+                        warnings=[]
                     )
                 
                 return editor.update_section_content(section_ref, content)
@@ -331,7 +343,9 @@ class MarkdownMCPServer:
                     return EditResult(
                         success=False,
                         operation=OperationType.MOVE,
-                        errors=[f"Section with ID '{section_id}' not found"]
+                        modified_sections=[],
+                        errors=[f"Section with ID '{section_id}' not found"],
+                        warnings=[]
                     )
                 
                 sections = editor.get_sections()
@@ -340,11 +354,13 @@ class MarkdownMCPServer:
                     return EditResult(
                         success=False,
                         operation=OperationType.MOVE,
-                        errors=[f"Target position {target_position} is out of range (0-{len(sections)-1})"]
+                        modified_sections=[],
+                        errors=[f"Target position {target_position} is out of range (0-{len(sections)-1})"],
+                        warnings=[]
                     )
                 
                 target_section = sections[target_position]
-                return editor.move_section_after(section_ref, target_section)
+                return editor.move_section(section_ref, target_section, "after")
             
             validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
             validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)

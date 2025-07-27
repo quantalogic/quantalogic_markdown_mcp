@@ -361,6 +361,21 @@ class SafeMarkdownEditor:
                 # Replace content while preserving heading
                 if start_line < len(lines):
                     new_content_lines = content.split('\n')
+                    
+                    # Check if the new content starts with a duplicate header
+                    # If so, remove it to prevent duplication
+                    if new_content_lines and new_content_lines[0].strip():
+                        first_line = new_content_lines[0]
+                        expected_header = "#" * section_ref.level + " " + section_ref.title
+                        # Only remove if it's an EXACT match (including spacing)
+                        if first_line == expected_header:
+                            # Skip the duplicate header and any following empty lines
+                            skip_lines = 1
+                            while (skip_lines < len(new_content_lines) and 
+                                   not new_content_lines[skip_lines].strip()):
+                                skip_lines += 1
+                            new_content_lines = new_content_lines[skip_lines:]
+                    
                     new_lines = (lines[:start_line + 1] + 
                                new_content_lines + 
                                lines[end_line + 1:])
