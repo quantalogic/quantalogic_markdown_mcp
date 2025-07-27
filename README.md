@@ -295,23 +295,19 @@ For this project, use the development setup since you're working with the source
         "--directory",
         "${workspaceFolder}",
         "run",
-        "--",
         "python",
-        "-m",
-        "quantalogic_markdown_mcp.mcp_server"
+        "-c",
+        "import sys; sys.path.insert(0, 'src'); from quantalogic_markdown_mcp.mcp_server import mcp; mcp.run()"
       ],
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/src"
-      }
+      "cwd": "${workspaceFolder}"
     }
   }
 }
 ```
 
-**Option 2: Using Direct Script Path**
+**Option 2: Alternative Development Approach**
 
-Alternative approach using the script path directly:
+Using environment variables for Python path:
 
 ```json
 {
@@ -323,10 +319,15 @@ Alternative approach using the script path directly:
         "--directory",
         "${workspaceFolder}",
         "run",
+        "--",
         "python",
-        "src/quantalogic_markdown_mcp/mcp_server.py"
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
       ],
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
     }
   }
 }
@@ -875,9 +876,10 @@ Thank you for reading!
    ```
 3. **Verify the command path and arguments** in your configuration
 4. **Test the command manually** in a terminal from the correct working directory:
+
    ```bash
    cd /path/to/quantalogic-markdown-edit-mcp
-   uv run -- python -m quantalogic_markdown_mcp.mcp_server
+   uv run python -c "import sys; sys.path.insert(0, 'src'); from quantalogic_markdown_mcp.mcp_server import mcp; print('MCP server ready')"
    ```
 5. **Ensure all required dependencies are installed**: `uv sync`
 6. **Check file permissions** on the server executable

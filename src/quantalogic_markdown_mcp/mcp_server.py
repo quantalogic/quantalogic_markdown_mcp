@@ -908,3 +908,13 @@ All operations support both section IDs and heading-based lookups where appropri
 # Global instances for backward compatibility and direct usage
 server = MarkdownMCPServer()
 mcp = server.mcp
+
+if __name__ == "__main__":
+    # Initialize with an empty document for stateless operations
+    server.initialize_document(
+        markdown_text="# Welcome\n\nThis is a stateless MCP server.\n",
+        validation_level=ValidationLevel.NORMAL
+    )
+    
+    print("Starting SafeMarkdownEditor MCP Server (Stateless Mode)...")
+    mcp.run()
