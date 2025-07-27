@@ -1,13 +1,13 @@
 
 [project]
 name = "quantalogic-markdown-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "A flexible and extensible Markdown parser with AST support"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Raphael Mansuy", email = "raphael.mansuy@example.com"},
+    {name = "Raphael Mansuy", email = "raphael.mansuy@gmail.com"},
 ]
 keywords = ["markdown", "parser", "ast", "commonmark"]
 classifiers = [
@@ -81,9 +81,11 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "black>=23.0.0",
+    "build>=1.2.2.post1",
     "mypy>=1.0.0",
     "pygments>=2.0.0",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
+    "twine>=6.1.0",
 ]
