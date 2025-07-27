@@ -207,7 +207,7 @@ class MarkdownMCPServer:
                         errors=[f"Section with ID '{section_id}' not found"]
                     )
                 
-                return editor.update_section(section_ref, content)
+                return editor.update_section_content(section_ref, content)
             
             validation_map = {"STRICT": ValidationLevel.STRICT, "NORMAL": ValidationLevel.NORMAL, "PERMISSIVE": ValidationLevel.PERMISSIVE}
             validation_enum = validation_map.get(validation_level.upper(), ValidationLevel.NORMAL)

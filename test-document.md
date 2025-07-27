@@ -4,7 +4,15 @@ This is a sample document for testing the SafeMarkdownEditor MCP server.
 
 ## Introduction
 
-Welcome to the MCP test document! This file is designed to help you test the various capabilities of the SafeMarkdownEditor MCP server.
+Welcome to the MCP test document! This comprehensive file is designed to help you explore and validate the full range of features provided by the SafeMarkdownEditor MCP server.
+
+**What you can do with this document:**
+- Test basic operations like loading, listing, and retrieving content
+- Experiment with advanced features like section insertion, deletion, and movement
+- Practice with various content types including code blocks, lists, and tables
+- Learn troubleshooting techniques and review server logs
+
+Feel free to modify, extend, or reset this document as you explore different tools and workflows. Each section demonstrates different aspects of the MCP server's capabilities.
 
 ## Features to Test
 
