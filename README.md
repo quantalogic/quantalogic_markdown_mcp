@@ -2,6 +2,10 @@
 
 A Model Context Protocol (MCP) server that provides powerful Markdown document editing capabilities with thread-safe operations, atomic transactions, and comprehensive validation.
 
+**📦 Available on PyPI**: [quantalogic-markdown-mcp](https://pypi.org/project/quantalogic-markdown-mcp/)
+
+**🚀 Quick Start**: Install with `uv add quantalogic-markdown-mcp` or `pip install quantalogic-markdown-mcp`
+
 ## Features
 
 ✨ **Comprehensive Markdown Editing**
@@ -50,40 +54,62 @@ A Model Context Protocol (MCP) server that provides powerful Markdown document e
 - Python 3.11 or higher
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 
-### Install with uv (Recommended)
+### Quick Install from PyPI (Recommended)
+
+The package is now available on PyPI! Install it directly:
+
+```bash
+# Install with uv (recommended)
+uv add quantalogic-markdown-mcp
+
+# Or install with pip
+pip install quantalogic-markdown-mcp
+```
+
+### Run Directly with uvx (No Installation Required)
+
+You can run the MCP server directly without installing it locally:
+
+```bash
+# Run directly with uvx
+uvx --from quantalogic-markdown-mcp python -m quantalogic_markdown_mcp.mcp_server
+```
+
+### Development Installation
+
+For development or to contribute to the project:
 
 ```bash
 # Clone the repository
 git clone https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp.git
 cd quantalogic-markdown-edit-mcp
 
-# Install dependencies
-uv sync
+# Install with development dependencies
+uv sync --group dev
 
 # Install in development mode
 uv pip install -e .
-```
-
-### Install with pip
-
-```bash
-# Clone the repository
-git clone https://github.com/raphaelmansuy/quantalogic-markdown-edit-mcp.git
-cd quantalogic-markdown-edit-mcp
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -e .
 ```
 
 ## Quick Start
 
 ### Running the Server
 
-#### Method 1: Direct Python Execution
+#### Method 1: Direct Execution (PyPI Installation)
+
+If you installed from PyPI:
+
+```bash
+# Run the MCP server directly
+python -m quantalogic_markdown_mcp.mcp_server
+
+# Or with uvx (no installation required)
+uvx --from quantalogic-markdown-mcp python -m quantalogic_markdown_mcp.mcp_server
+```
+
+#### Method 2: Development Installation
+
+If you cloned the repository:
 
 ```bash
 # Using uv
@@ -93,26 +119,96 @@ uv run python -m quantalogic_markdown_mcp.mcp_server
 python -m quantalogic_markdown_mcp.mcp_server
 ```
 
-#### Method 2: Using the Development Script
+#### Method 3: Using the Development Script
+
+For development from source:
 
 ```bash
 # Run the development server
 python dev-scripts/run_mcp_server.py
 ```
 
-#### Method 3: Using FastMCP CLI
-
-```bash
-# Install FastMCP CLI if not already installed
-uv add fastmcp
-
-# Run with FastMCP CLI
-fastmcp run src/quantalogic_markdown_mcp/mcp_server.py:mcp
-```
-
 ### Connecting to Claude Desktop
 
 To use this MCP server with Claude Desktop, add the following configuration to your `claude_desktop_config.json`:
+
+#### Option 1: Using PyPI Installation (Recommended)
+
+**macOS/Linux:**
+
+```json
+{
+  "mcpServers": {
+    "markdown-editor": {
+      "command": "python",
+      "args": [
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+**Windows:**
+
+```json
+{
+  "mcpServers": {
+    "markdown-editor": {
+      "command": "python.exe",
+      "args": [
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+#### Option 2: Using uvx (No Installation Required)
+
+**macOS/Linux:**
+
+```json
+{
+  "mcpServers": {
+    "markdown-editor": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "quantalogic-markdown-mcp",
+        "python",
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+**Windows:**
+
+```json
+{
+  "mcpServers": {
+    "markdown-editor": {
+      "command": "uvx.exe",
+      "args": [
+        "--from",
+        "quantalogic-markdown-mcp",
+        "python",
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+#### Option 3: Development Installation
+
+For development from source:
 
 **macOS/Linux:**
 
@@ -175,6 +271,45 @@ To use this MCP server with VSCode and GitHub Copilot, you have several configur
 
 Create a `.vscode/mcp.json` file in your workspace root to share the configuration with your team:
 
+**Option 1: Using PyPI Installation**
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+**Option 2: Using uvx (No Installation Required)**
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "quantalogic-markdown-mcp",
+        "python",
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+**Option 3: Development Installation**
+
 ```json
 {
   "servers": {
@@ -195,23 +330,18 @@ Create a `.vscode/mcp.json` file in your workspace root to share the configurati
 }
 ```
 
-**For Windows:**
+**For Windows (adjust command names):**
 
 ```json
 {
   "servers": {
     "markdown-editor": {
       "type": "stdio", 
-      "command": "uv.exe",
+      "command": "python.exe",
       "args": [
-        "--directory",
-        "${workspaceFolder}",
-        "run",
-        "python", 
         "-m",
         "quantalogic_markdown_mcp.mcp_server"
-      ],
-      "cwd": "${workspaceFolder}"
+      ]
     }
   }
 }
@@ -224,6 +354,45 @@ For system-wide access across all workspaces:
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
 2. Run `MCP: Open User Configuration`
 3. Add the server configuration:
+
+**Option 1: Using PyPI Installation**
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+**Option 2: Using uvx**
+
+```json
+{
+  "servers": {
+    "markdown-editor": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "quantalogic-markdown-mcp",
+        "python",
+        "-m",
+        "quantalogic_markdown_mcp.mcp_server"
+      ]
+    }
+  }
+}
+```
+
+**Option 3: Development Installation**
 
 ```json
 {
@@ -393,8 +562,15 @@ import asyncio
 from fastmcp import Client
 
 async def demo():
-    # Connect to the server
-    async with Client("src/quantalogic_markdown_mcp/mcp_server.py") as client:
+    # Connect to the server (adjust command based on your installation)
+    
+    # Option 1: If installed from PyPI
+    async with Client("python -m quantalogic_markdown_mcp.mcp_server") as client:
+        # ... rest of the code remains the same
+        
+    # Option 2: If using development installation
+    # async with Client("src/quantalogic_markdown_mcp/mcp_server.py") as client:
+    
         # List available tools
         tools = await client.list_tools()
         print(f"Available tools: {[tool.name for tool in tools]}")
