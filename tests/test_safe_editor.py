@@ -97,10 +97,14 @@ Content for section C.
         expected_levels = [1, 2, 3, 3, 2, 2]
         assert levels == expected_levels
         
-        # Check all sections have valid IDs
+        # Check all sections have valid human-readable IDs
         for section in sections:
-            assert section.id.startswith("section_")
-            assert len(section.id) > 8  # Should have hash part
+            assert section.id  # Should not be empty
+            assert isinstance(section.id, str)  # Should be a string
+            # Human-readable IDs should not contain spaces and should be reasonable length
+            assert ' ' not in section.id
+            assert len(section.id) > 0
+            assert len(section.id) <= 60
 
     def test_get_section_by_id(self, editor):
         """Test get_section_by_id method."""

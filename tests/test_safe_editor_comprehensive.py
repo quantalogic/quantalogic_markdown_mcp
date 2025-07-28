@@ -71,9 +71,14 @@ Content for section C.
         # Should have 6 sections total
         assert len(sections) == 6
         
-        # Check all sections have valid IDs
+        # Check all sections have valid human-readable IDs
         for section in sections:
-            assert section.id.startswith("section_")
+            assert section.id  # Should not be empty
+            assert isinstance(section.id, str)  # Should be a string
+            # Human-readable IDs should not contain spaces and should be reasonable length
+            assert ' ' not in section.id
+            assert len(section.id) > 0
+            assert len(section.id) <= 60
             assert len(section.id) > 8  # Should have hash part
 
     def test_get_section_by_id(self, editor):
@@ -548,9 +553,12 @@ Content for A1."""
         sections = editor.get_sections()
         assert len(sections) > 0
         
-        # All sections should have proper IDs
+        # All sections should have proper human-readable IDs
         for section in sections:
-            assert section.id.startswith("section_")
+            assert section.id  # Should not be empty
+            assert isinstance(section.id, str)  # Should be a string
+            assert ' ' not in section.id  # No spaces
+            assert len(section.id) <= 60  # Reasonable length
             assert len(section.id) > 8
 
     def test_section_boundary_detection(self):

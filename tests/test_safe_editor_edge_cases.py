@@ -352,9 +352,12 @@ Content for A1.
         sections = editor.get_sections()
         assert len(sections) > 0
         
-        # All sections should have proper IDs
+        # All sections should have proper human-readable IDs
         for section in sections:
-            assert section.id.startswith("section_")
+            assert section.id  # Should not be empty
+            assert isinstance(section.id, str)  # Should be a string
+            assert ' ' not in section.id  # No spaces
+            assert len(section.id) <= 60  # Reasonable length
             assert len(section.id) > 8
         
         # Test _generate_section_id consistency

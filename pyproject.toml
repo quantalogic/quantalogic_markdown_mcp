@@ -1,7 +1,7 @@
 
 [project]
 name = "quantalogic-markdown-mcp"
-version = "0.2.0"
+version = "0.2.2"
 description = "A flexible and extensible Markdown parser with AST support"
 readme = "README.md"
 requires-python = ">=3.11"

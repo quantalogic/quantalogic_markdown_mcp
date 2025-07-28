@@ -1,6 +1,5 @@
 """Safe Markdown Editor - Main implementation."""
 
-import hashlib
 import re
 import threading 
 from datetime import datetime
@@ -8,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from .ast_utils import ASTWrapper
 from .parser import QuantalogicMarkdownParser
+from .section_id_generator import section_id_generator
 from .safe_editor_types import (
     DocumentStatistics,
     EditOperation,
@@ -983,8 +983,13 @@ class SafeMarkdownEditor:
             # Build hierarchical path
             path = self._build_section_path(heading, headings[:i])
             
-            # Generate stable ID
-            section_id = self._generate_section_id(heading, line_start)
+            # Generate human-readable ID using new generator
+            section_id = section_id_generator.generate_section_id(
+                title=heading['content'],
+                level=heading['level'],
+                line_start=line_start,
+                existing_sections=sections  # Pass already processed sections for collision detection
+            )
             
             section = SectionReference(
                 id=section_id,
@@ -1011,13 +1016,6 @@ class SafeMarkdownEditor:
                 current_level = heading['level']
         
         return path
-    
-    def _generate_section_id(self, heading: Dict[str, Any], line_start: int) -> str:
-        """Generate stable section ID."""
-        # Use title, level, and position to create stable hash
-        content = f"{heading['content']}:{heading['level']}:{line_start}"
-        hash_value = hashlib.md5(content.encode()).hexdigest()[:8]
-        return f"section_{hash_value}"
     
     def _is_valid_section_reference(self, section_ref: SectionReference) -> bool:
         """Check if a section reference is valid in the current document."""

@@ -77,6 +77,10 @@ class MarkdownMCPServer:
                           validation_level: str = "NORMAL") -> Dict[str, Any]:
             """
             Insert a new section at a specified location.
+            The document will be saved after the operation if successful and auto_save is True.
+            """
+            """
+            Insert a new section at a specified location.
             
             Args:
                 document_path: Path to the Markdown file
@@ -139,6 +143,10 @@ class MarkdownMCPServer:
                           validation_level: str = "NORMAL") -> Dict[str, Any]:
             """
             Delete a section by ID or heading.
+            The document will be saved after the operation if successful and auto_save is True.
+            """
+            """
+            Delete a section by ID or heading.
             
             Args:
                 document_path: Path to the Markdown file
@@ -196,6 +204,10 @@ class MarkdownMCPServer:
         def update_section(document_path: str, section_id: str, content: str,
                           auto_save: bool = True, backup: bool = True,
                           validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Update the content of an existing section.
+            The document will be saved after the operation if successful and auto_save is True.
+            """
             """
             Update the content of an existing section.
             
@@ -325,6 +337,10 @@ class MarkdownMCPServer:
         def move_section(document_path: str, section_id: str, target_position: int,
                         auto_save: bool = True, backup: bool = True,
                         validation_level: str = "NORMAL") -> Dict[str, Any]:
+            """
+            Move a section to a different position.
+            The document will be saved after the operation if successful and auto_save is True.
+            """
             """
             Move a section to a different position.
             
@@ -926,11 +942,5 @@ server = MarkdownMCPServer()
 mcp = server.mcp
 
 if __name__ == "__main__":
-    # Initialize with an empty document for stateless operations
-    server.initialize_document(
-        markdown_text="# Welcome\n\nThis is a stateless MCP server.\n",
-        validation_level=ValidationLevel.NORMAL
-    )
-    
     print("Starting SafeMarkdownEditor MCP Server (Stateless Mode)...")
     mcp.run()
